@@ -15,6 +15,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          # Bazel resolves the full multi-platform dependency graph (boost,
+          # Android SDK, Swift toolchain, etc.) even for the web-only build,
+          # which exceeds the runner's default free space. Remove large
+          # unused preinstalled SDKs/runtimes; keep the Android SDK itself
+          # (just its system-images) since Bazel still resolves paths under it.
+          sudo rm -rf /usr/local/lib/android/sdk/system-images 2>/dev/null || true
+          sudo rm -rf /usr/share/dotnet 2>/dev/null || true
+          sudo rm -rf /opt/ghc 2>/dev/null || true
+          sudo rm -rf /usr/local/.ghcup 2>/dev/null || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL 2>/dev/null || true
+          sudo docker image prune --all --force 2>/dev/null || true
+          df -h /
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -29,6 +44,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: src/web/package-lock.json
 
       - name: Build ayab_web
         run: bazel build :ayab_web --define disable_minify_web=true
