@@ -1,0 +1,20 @@
+load("@valdi//bzl/valdi:valdi_application.bzl", "valdi_application")
+load("@valdi//bzl/valdi:valdi_exported_library.bzl", "valdi_exported_library")
+
+valdi_application(
+    name = "ayab_valdi_app",
+    ios_bundle_id = "com.website.ayab_valdi",
+    ios_families = ["iphone"],
+    root_component_path = "App@ayab_valdi/src/App",
+    title = "ayab_valdi",
+    version = "1.0.0",
+    deps = ["//modules/ayab_valdi"],
+)
+
+valdi_exported_library(
+    name = "ayab_valdi_export",
+    ios_bundle_id = "com.website.ayab_valdi.lib",
+    ios_bundle_name = "AyabValdi",
+    web_package_name = "ayab_web",
+    deps = ["//modules/ayab_valdi"],
+)

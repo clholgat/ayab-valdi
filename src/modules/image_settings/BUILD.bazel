@@ -1,0 +1,43 @@
+# Usage Instructions for This Module
+#
+# Step 1: Add this module to your `BUILD.bazel` file dependencies:
+#         `//src/valdi/image_settings`
+#
+# Step 2: Import the module in your `.tsx` file:
+#         `import { NewModuleComponent } from 'image_settings/src/NewModuleComponent';`
+#
+# Step 3: Render the component in your `onRender()` function:
+#         `<NewModuleComponent title={'Valdi'}/>`
+
+load("@valdi//bzl/valdi:valdi_module.bzl", "valdi_module")
+
+valdi_module(
+    name = "image_settings",
+    srcs = glob(
+        [
+            "src/**/*.ts",
+            "src/**/*.tsx",
+            "test/**/*.ts",
+            "test/**/*.tsx",
+        ],
+    ),
+    res = glob([
+        "res/**/*.jpeg",
+        "res/**/*.jpg",
+        "res/**/*.png",
+        "res/**/*.svg",
+        "res/**/*.webp",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        "@valdi//src/valdi_modules/src/valdi/valdi_core",
+        "@valdi//src/valdi_modules/src/valdi/valdi_tsx",
+        "@valdi//src/valdi_modules/src/valdi/valdi_test",
+        "@valdi//src/valdi_modules/src/valdi/foundation",
+        "@valdi_widgets//valdi_modules/widgets",
+        "//modules/state_machine",
+        "//modules/app_settings",
+        "//modules/constants",
+        "//modules/preview",
+    ],
+)

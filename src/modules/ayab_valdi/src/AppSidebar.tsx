@@ -1,0 +1,151 @@
+import { Component } from "valdi_core/src/Component";
+import { Style } from "valdi_core/src/Style";
+import { Layout, ScrollView } from "valdi_tsx/src/NativeTemplateElements";
+import { ImageSettings, ImageSettingsComponent } from "image_settings/src/ImageSettingsComponent";
+import { BUTTON_FONT_SMALL } from "constants/src/Typography";
+import {
+  CoreButton,
+  CoreButtonColoring,
+  CoreButtonSizing,
+} from "widgets/src/components/button/CoreButton";
+import { SerialPortPicker } from "./SerialPortPicker";
+import { AppKnitFooter } from "./AppKnitFooter";
+import { FeedbackLevel } from "./Feedback";
+import { shouldShowKnitActionBanner } from "./KnitSessionUiLogic";
+import { tourHighlightActive } from "./FirstRunTour";
+import { ActiveTourBubble, InlineTourBubble } from "./InlineTourBubble";
+
+export interface AppSidebarViewModel {
+  sessionLocked: boolean;
+  machineRevision: number;
+  imageWidth?: number;
+  imageHeight?: number;
+  imageBitsRevision: number;
+  hasImage: boolean;
+  repeatH: number;
+  repeatV: number;
+  stretchH: number;
+  stretchV: number;
+  knitDisabled: boolean;
+  knitDisabledReason: string | null;
+  isKnitting: boolean;
+  userMessageText?: string;
+  userMessageLevel?: FeedbackLevel;
+  activeTourTargetId?: string;
+  tourBubble?: ActiveTourBubble | null;
+  onOpenSettings: () => void;
+  onSerialPortChange: (serialPort: string) => void;
+  onSettingsChange: (settings: ImageSettings) => void;
+  onStretchChange: (stretchH: number, stretchV: number) => void;
+  onRepeatChange: (repeatH: number, repeatV: number) => void;
+  onFlipH: () => void;
+  onFlipV: () => void;
+  onRotate: () => void;
+  onInvert: () => void;
+  onKnit: () => void;
+  onCancel: () => void;
+}
+
+export class AppSidebar extends Component<AppSidebarViewModel> {
+  onRender(): void {
+    const vm = this.viewModel;
+    const target = vm.activeTourTargetId;
+    const showActionBanner = shouldShowKnitActionBanner(
+      vm.isKnitting,
+      vm.userMessageText,
+    );
+
+    <layout style={styles.rightPanel}>
+      <scroll style={styles.sidebarScroll}>
+        <layout style={styles.sidebarScrollInner}>
+          <layout style={styles.settingsButtonRow}>
+            <CoreButton
+              accessibilityId="settings-button"
+              text="Settings"
+              onTap={vm.onOpenSettings}
+              coloring={CoreButtonColoring.SECONDARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
+              disabled={vm.sessionLocked}
+              width="100%"
+            />
+          </layout>
+          <SerialPortPicker
+            tourHighlighted={tourHighlightActive(target, "checklist-target-connection")}
+            onChange={vm.onSerialPortChange}
+          />
+          <InlineTourBubble
+            targetId="checklist-target-connection"
+            bubble={vm.tourBubble}
+          />
+          <ImageSettingsComponent
+            machineRevision={vm.machineRevision}
+            imageWidth={vm.imageWidth}
+            imageHeight={vm.imageHeight}
+            imageBitsRevision={vm.imageBitsRevision}
+            hasImage={vm.hasImage}
+            repeatH={vm.repeatH}
+            repeatV={vm.repeatV}
+            stretchH={vm.stretchH}
+            stretchV={vm.stretchV}
+            tourHighlighted={tourHighlightActive(target, "checklist-target-needles")}
+            onSettingsChange={vm.onSettingsChange}
+            onStretchChange={vm.onStretchChange}
+            onRepeatChange={vm.onRepeatChange}
+            onFlipH={vm.onFlipH}
+            onFlipV={vm.onFlipV}
+            onRotate={vm.onRotate}
+            onInvert={vm.onInvert}
+          />
+          <InlineTourBubble
+            targetId="checklist-target-needles"
+            bubble={vm.tourBubble}
+          />
+        </layout>
+      </scroll>
+      <InlineTourBubble targetId="checklist-target-knit" bubble={vm.tourBubble} />
+      <AppKnitFooter
+        isKnitting={vm.isKnitting}
+        knitDisabled={vm.knitDisabled}
+        knitDisabledReason={vm.knitDisabledReason}
+        userMessageText={
+          showActionBanner ? undefined : vm.userMessageText
+        }
+        userMessageLevel={
+          showActionBanner ? undefined : vm.userMessageLevel
+        }
+        tourHighlighted={tourHighlightActive(target, "checklist-target-knit")}
+        onKnit={vm.onKnit}
+        onCancel={vm.onCancel}
+      />
+    </layout>;
+  }
+}
+
+const styles = {
+  rightPanel: new Style<Layout>({
+    width: 408,
+    flexShrink: 0,
+    flexGrow: 0,
+    height: "100%",
+    minHeight: 0,
+    flexDirection: "column",
+    alignSelf: "stretch",
+  }),
+  sidebarScroll: new Style<ScrollView>({
+    width: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+    alignSelf: "stretch",
+  }),
+  sidebarScrollInner: new Style<Layout>({
+    width: "100%",
+    flexDirection: "column",
+    paddingBottom: 8,
+  }),
+  settingsButtonRow: new Style<Layout>({
+    width: "100%",
+    marginBottom: 8,
+  }),
+};

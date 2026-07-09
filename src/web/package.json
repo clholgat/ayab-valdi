@@ -1,0 +1,42 @@
+{
+  "name": "ayab-web",
+  "version": "1.0.0",
+  "description": "Web server for ayab_web",
+  "main": "index.js",
+  "scripts": {
+    "ensure-ayab-web": "node scripts/ensure-ayab-web.js",
+    "prebuild": "npm run ensure-ayab-web",
+    "preserve": "npm run ensure-ayab-web",
+    "serve": "webpack serve --mode development",
+    "build": "webpack --mode production",
+    "start": "./start.sh",
+    "e2e": "node e2e/run.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.27.4",
+    "@babel/preset-env": "^7.27.2",
+    "@babel/preset-react": "^7.27.1",
+    "babel-loader": "^8.4.1",
+    "css-loader": "^6.2.0",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.3.2",
+    "path-browserify": "^1.0.1",
+    "puppeteer": "^25.3.0",
+    "sass": "^1.38.1",
+    "sass-loader": "^12.1.0",
+    "style-loader": "^3.2.1",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.1.6",
+    "url-loader": "^4.1.1",
+    "webpack": "^5.51.1",
+    "webpack-cli": "^4.8.0",
+    "webpack-dev-server": "^4.15.1"
+  }
+}

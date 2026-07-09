@@ -1,0 +1,12 @@
+# Ignore Bazel output symlinks to prevent them from being processed as part of the workspace
+# These are symlinks created by Bazel for convenience, but they can cause issues
+# with external repository resolution on second builds
+bazel-ayab_valdi
+bazel-bin
+bazel-out
+bazel-src
+bazel-testlogs
+
+# Cursor AI skills/rules — not part of the Bazel workspace
+.cursor
+

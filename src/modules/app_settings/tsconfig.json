@@ -1,0 +1,50 @@
+{
+    "extends": "../../bazel-src/external/valdi~/modules/_configs/base.tsconfig.json",
+    "compilerOptions": {
+        "paths": {
+            "app_settings/*": [
+                "./*"
+            ],
+            "jasmine/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/jasmine/*"
+            ],
+            "coreutils/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/coreutils/*"
+            ],
+            "source_map/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/source_map/*"
+            ],
+            "valdi_tsx/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_tsx/*"
+            ],
+            "valdi_core/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/*"
+            ],
+            "file_system/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/file_system/*"
+            ],
+            "valdi_standalone/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_standalone/*"
+            ],
+            "constants/*": [
+                "../constants/*"
+            ],
+            "persistence/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/persistence/*"
+            ],
+            "state_machine/*": [
+                "../state_machine/*"
+            ],
+            "tslib": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/src/tslib"
+            ]
+        },
+        "types": [
+            "../../bazel-src/external/valdi~/modules/types/Long",
+            "../../bazel-src/external/valdi~/modules/types/globals"
+        ],
+        "rootDirs": [
+            ".."
+        ]
+    }
+}

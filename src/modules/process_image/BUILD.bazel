@@ -1,0 +1,80 @@
+load("@valdi//bzl/valdi:valdi_module.bzl", "valdi_module")
+load("@valdi//bzl/valdi:valdi_android_library.bzl", "valdi_android_library")
+
+cc_library(
+    name = "process_image_native_impl",
+    srcs = select({
+        "@valdi//bzl/conditions:macos": ["cpp/DesktopProcessImageModule.cpp"],
+        "@valdi//bzl/conditions:linux": ["cpp/DesktopProcessImageModule.cpp"],
+        "//conditions:default": [],
+    }),
+    hdrs = [],
+    includes = [],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@valdi//valdi_core",
+        "@valdi//valdi",
+    ],
+    alwayslink = 1,
+)
+
+valdi_android_library(
+    name = "android_impl",
+    srcs = glob([
+        "android/**/*.kt",
+    ]),
+    deps = [
+        ":process_image_api_kt",
+    ],
+)
+
+objc_library(
+    name = "ios_impl",
+    srcs = glob([
+        "ios/**/*.m",
+    ]),
+    hdrs = glob([
+        "ios/**/*.h",
+    ]),
+    copts = ["-I."],
+    deps = [
+        ":process_image_api_objc",
+        "@valdi//valdi",
+    ],
+)
+
+valdi_module(
+    name = "process_image",
+    srcs = glob([
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "src/**/*.d.ts",
+        "test/**/*.ts",
+        "test/**/*.tsx",
+    ]),
+    android_deps = [":android_impl"],
+    ios_deps = [":ios_impl"],
+    native_deps = [":process_image_native_impl"],
+    ios_module_name = "ProcessImage",
+    web_deps = [":process_image_web"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@valdi//src/valdi_modules/src/valdi/valdi_core",
+        "@valdi//src/valdi_modules/src/valdi/valdi_test",
+    ],
+)
+
+# Web implementation using Canvas API
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+
+ts_project(
+    name = "process_image_web",
+    srcs = glob([
+        "web/**/*.ts",
+        "src/**/*.d.ts",
+    ]),
+    allow_js = True,
+    composite = True,
+    transpiler = "tsc",
+    tsconfig = "web/tsconfig.json",
+)

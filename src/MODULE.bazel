@@ -1,0 +1,110 @@
+module(name = "ayab_valdi", version = "0.1")
+
+# Pinned upstream commits (keep in sync with .github/valdi-deps.env).
+# Update with: ./scripts/pin-valdi-deps.sh <valdi-sha> <widgets-sha>
+VALDI_REF = "8776dbd68e369efb168deb7688f10dddde8cb121"
+WIDGETS_REF = "eaf2af1682c406abfa87ebf5c87d01dd44e14c9c"
+
+VALDI_URL = "https://github.com/Snapchat/Valdi/archive/{}.tar.gz".format(VALDI_REF)
+VALDI_STRIP_PREFIX = "Valdi-{}".format(VALDI_REF)
+
+WIDGETS_URL = "https://github.com/Snapchat/Valdi_Widgets/archive/{}.tar.gz".format(WIDGETS_REF)
+WIDGETS_STRIP_PREFIX = "Valdi_Widgets-{}".format(WIDGETS_REF)
+
+bazel_dep(name = "valdi", version = "0.1")
+archive_override(
+    module_name = "valdi",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX,
+    patches = [
+        "//patches/valdi:0001-Isolate-web-PersistentStoreNative-memory-by-store-name.patch",
+    ],
+    patch_strip = 1,
+)
+
+bazel_dep(name = "android_macros")
+archive_override(
+    module_name = "android_macros",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX + "/bzl/macros",
+)
+
+bazel_dep(name = "snap_macros")
+archive_override(
+    module_name = "snap_macros",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX + "/bzl/valdi/snap_macros",
+)
+
+bazel_dep(name = "snap_client_toolchains")
+archive_override(
+    module_name = "snap_client_toolchains",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX + "/bzl/toolchains",
+)
+
+bazel_dep(name = "snap_platforms")
+archive_override(
+    module_name = "snap_platforms",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX + "/bzl/platforms",
+)
+
+bazel_dep(name = "skia_user_config")
+archive_override(
+    module_name = "skia_user_config",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX + "/third-party/skia_user_config",
+)
+
+bazel_dep(name = "rules_hdrs")
+archive_override(
+    module_name = "rules_hdrs",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX + "/third-party/rules_hdrs",
+)
+
+bazel_dep(name = "valdi_toolchain")
+archive_override(
+    module_name = "valdi_toolchain",
+    urls = [VALDI_URL],
+    strip_prefix = VALDI_STRIP_PREFIX + "/bin",
+)
+
+bazel_dep(name = "valdi_widgets")
+archive_override(
+    module_name = "valdi_widgets",
+    urls = [WIDGETS_URL],
+    strip_prefix = WIDGETS_STRIP_PREFIX,
+)
+
+valdi_toolchains = use_extension("@valdi//bzl:valdi_toolchains.bzl", "valdi_toolchains")
+use_repo(valdi_toolchains, "local_config_apple_cc_toolchains", "local_config_apple_cc", "llvm_toolchain", "llvm_toolchain_llvm")
+register_toolchains("@local_config_apple_cc_toolchains//:all")
+register_toolchains("@llvm_toolchain//:all")
+
+single_version_override(module_name = "protobuf", version = "27.0")
+single_version_override(module_name = "rules_apple", version = "4.0.0")
+single_version_override(module_name = "rules_pkg", version = "0.9.1")
+single_version_override(module_name = "zlib", version = "1.3.2")
+
+bazel_dep(name = "rules_jvm_external", version = "6.2")
+
+maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
+maven.install(
+    name = "serial_mvn",
+    artifacts = [
+        "com.hoho.android.usbserial:usb-serial-for-android:3.7.0",
+    ],
+    repositories = [
+        "https://repo1.maven.org/maven2",
+        "https://maven.google.com",
+    ],
+    fetch_sources = True,
+    version_conflict_policy = "pinned",
+)
+use_repo(maven, "serial_mvn")
+
+bazel_dep(name = "aspect_rules_ts", version = "3.7.0")
+rules_ts_ext = use_extension("@aspect_rules_ts//ts:extensions.bzl", "ext")
+use_repo(rules_ts_ext, "npm_typescript")

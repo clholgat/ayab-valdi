@@ -1,0 +1,35 @@
+load("@valdi//bzl/valdi:valdi_module.bzl", "valdi_module")
+
+valdi_module(
+    name = "ayab_valdi",
+    srcs = glob([
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "test/**/*.ts",
+        "test/**/*.tsx",
+    ]),
+    res = glob([
+        "res/**/*.jpeg",
+        "res/**/*.jpg",
+        "res/**/*.png",
+        "res/**/*.svg",
+        "res/**/*.webp",
+    ]),
+    visibility = ["//visibility:public"],
+    deps = [
+        "@valdi//src/valdi_modules/src/valdi/valdi_core",
+        "@valdi//src/valdi_modules/src/valdi/valdi_tsx",
+        "@valdi//src/valdi_modules/src/valdi/valdi_test",
+        "@valdi//src/valdi_modules/src/valdi/foundation",
+        "@valdi_widgets//valdi_modules/widgets",
+        "@valdi_widgets//valdi_modules/valdi_standalone_ui",
+        "//modules/preview",
+        "//modules/image_settings",
+        "//modules/app_settings",
+        "//modules/serial",
+        "//modules/state_machine",
+        "//modules/constants",
+        # Needed for web support
+        "@valdi//src/valdi_modules/src/valdi/web_renderer",
+    ],
+)

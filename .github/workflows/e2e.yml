@@ -1,0 +1,49 @@
+name: E2E
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  web-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Fetch Valdi Bazel registry
+        run: bash ../scripts/ensure-valdi-registry.sh
+
+      - uses: bazelbuild/setup-bazelisk@v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build ayab_web
+        run: bazel build :ayab_web --define disable_minify_web=true
+
+      - name: Install web dependencies
+        working-directory: src/web
+        run: npm ci
+
+      - name: Run Puppeteer E2E
+        working-directory: src/web
+        run: npm run e2e
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: src/web/e2e/artifacts/*.png

@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest an improvement or new feature
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [PORT_AUDIT_AND_PLAN.md](https://github.com/clholgat/ayab-valdi/blob/main/PORT_AUDIT_AND_PLAN.md) — your feature may already be tracked as a known gap vs. ayab-desktop.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem does this solve? Who benefits?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like this to work?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: desktop-parity
+    attributes:
+      label: ayab-desktop parity
+      description: Does ayab-desktop already have this feature?
+      options:
+        - "Yes — port from desktop"
+        - "No — new to this port"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Target platform(s)
+      multiple: true
+      options:
+        - Web
+        - macOS
+        - Android
+        - All platforms
+    validations:
+      required: true

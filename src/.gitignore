@@ -1,0 +1,7 @@
+*.DS_Store
+
+bazel-*
+node_modules
+user.bazelrc
+.valdi-registry/
+.ayab_web_cache/

@@ -1,0 +1,121 @@
+load("@valdi//bzl/valdi:valdi_module.bzl", "valdi_module")
+load("@valdi//bzl/valdi:valdi_android_library.bzl", "valdi_android_library")
+
+valdi_android_library(
+    name = "android_impl",
+    srcs = glob([
+        "android/**/*.kt",
+    ]),
+    deps = [
+        ":serial_api_kt",
+        "@serial_mvn//:com_hoho_android_usbserial_usb_serial_for_android",
+    ],
+)
+
+objc_library(
+    name = "ios_impl",
+    srcs = glob([
+        "ios/**/*.m",
+    ]),
+    hdrs = glob([
+        "ios/**/*.h",
+    ]),
+    copts = ["-I."],
+    deps = [
+        ":serial_api_objc",
+    ],
+)
+
+objc_library(
+    name = "serial_native_impl_macos",
+    srcs = select({
+        "@valdi//bzl/conditions:macos": [
+            "cpp/SerialModuleFactoryMacOS.mm",
+            "cpp/MdnsDiscoveryMacOS.mm",
+        ],
+        "//conditions:default": [],
+    }),
+    hdrs = [],
+    copts = ["-I."],
+    sdk_frameworks = select({
+        "@valdi//bzl/conditions:macos": [
+            "IOKit",
+            "CoreFoundation",
+            "Foundation",
+        ],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+    deps = [
+        "@valdi//valdi_core",
+    ],
+    alwayslink = 1,
+)
+
+cc_library(
+    name = "serial_native_impl_linux",
+    srcs = select({
+        "@valdi//bzl/conditions:linux": ["cpp/SerialModuleFactoryLinux.cpp"],
+        "//conditions:default": [],
+    }),
+    hdrs = [],
+    includes = [],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@valdi//valdi_core",
+    ],
+    alwayslink = 1,
+)
+
+cc_library(
+    name = "serial_native_impl",
+    deps = select({
+        "@valdi//bzl/conditions:macos": [":serial_native_impl_macos"],
+        "@valdi//bzl/conditions:linux": [":serial_native_impl_linux"],
+        "//conditions:default": [],
+    }),
+    visibility = ["//visibility:public"],
+)
+
+valdi_module(
+    name = "serial",
+    srcs = glob([
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "test/**/*.ts",
+        "test/**/*.tsx",
+    ]),
+    android_deps = [":android_impl"],
+    ios_deps = [":ios_impl"],
+    native_deps = [":serial_native_impl"],
+    ios_module_name = "Serial",
+    web_deps = [":serial_web"],
+    web_register_native_module_id_overrides = {
+        # Runtime loads 'serial/src/Serial'; web stub is serial/web/SerialWeb.js
+        "serial/web/SerialWeb.js": "serial/src/Serial",
+    },
+    visibility = ["//visibility:public"],
+    deps = [
+        "@valdi//src/valdi_modules/src/valdi/valdi_core",
+        "@valdi//src/valdi_modules/src/valdi/valdi_test",
+        "@valdi//src/valdi_modules/src/valdi/worker",
+        "//modules/state_machine",
+        "//modules/constants",
+        "//modules/app_settings",
+    ],
+)
+
+# Web implementation using Web Serial API
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+
+ts_project(
+    name = "serial_web",
+    srcs = glob([
+        "web/**/*.ts",
+        "src/**/*.d.ts",
+    ]),
+    allow_js = True,
+    composite = True,
+    transpiler = "tsc",
+    tsconfig = "web/tsconfig.json",
+)

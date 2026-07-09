@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+        "name": "Valdi attach",
+        "type": "node",
+        "request": "attach",
+        "websocketAddress": "ws://localhost:13595",
+        "sourceMapPathOverrides": {
+            "/app_settings/*": "${workspaceRoot}/modules/app_settings/*",
+            "/ayab_valdi/*": "${workspaceRoot}/modules/ayab_valdi/*",
+            "/constants/*": "${workspaceRoot}/modules/constants/*",
+            "/image_settings/*": "${workspaceRoot}/modules/image_settings/*",
+            "/preview/*": "${workspaceRoot}/modules/preview/*",
+            "/process_image/*": "${workspaceRoot}/modules/process_image/*",
+            "/serial/*": "${workspaceRoot}/modules/serial/*",
+            "/state_machine/*": "${workspaceRoot}/modules/state_machine/*"
+        },
+        "sourceMaps": true,
+        "restart": false,
+        "resolveSourceMapLocations": []
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+    "extends": "../../bazel-src/external/valdi~/modules/_configs/base.tsconfig.json",
+    "compilerOptions": {
+        "paths": {
+            "ayab_valdi/*": [
+                "./*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/modules/ayab_valdi/.valdi_build/projectsync/generated_ts/ayab_valdi/*"
+            ],
+            "jasmine/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/jasmine/*"
+            ],
+            "coreutils/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/coreutils/*"
+            ],
+            "source_map/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/source_map/*"
+            ],
+            "valdi_tsx/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_tsx/*"
+            ],
+            "valdi_core/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/*"
+            ],
+            "valdi_rxjs/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_rxjs/*"
+            ],
+            "file_system/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/file_system/*"
+            ],
+            "valdi_standalone/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_standalone/*"
+            ],
+            "valdi_test/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_test/*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/external/valdi~/src/valdi_modules/src/valdi/valdi_test/.valdi_build/projectsync/generated_ts/valdi_test/*"
+            ],
+            "bridge_observables/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/bridge_observables/*"
+            ],
+            "foundation/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/foundation/*"
+            ],
+            "widgets/*": [
+                "../../bazel-src/external/valdi_widgets~/valdi_modules/widgets/*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/external/valdi_widgets~/valdi_modules/widgets/.valdi_build/projectsync/generated_ts/widgets/*"
+            ],
+            "navigation/*": [
+                "../../bazel-src/external/valdi_widgets~/valdi_modules/navigation/*"
+            ],
+            "navigation_internal/*": [
+                "../../bazel-src/external/valdi_widgets~/valdi_modules/navigation_internal/*"
+            ],
+            "constants/*": [
+                "../constants/*"
+            ],
+            "valdi_standalone_ui/*": [
+                "../../bazel-src/external/valdi_widgets~/valdi_modules/valdi_standalone_ui/*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/external/valdi_widgets~/valdi_modules/valdi_standalone_ui/.valdi_build/projectsync/generated_ts/valdi_standalone_ui/*"
+            ],
+            "process_image/*": [
+                "../process_image/*"
+            ],
+            "state_machine/*": [
+                "../state_machine/*"
+            ],
+            "persistence/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/persistence/*"
+            ],
+            "app_settings/*": [
+                "../app_settings/*"
+            ],
+            "worker/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/worker/*"
+            ],
+            "valdi_navigation/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_navigation/*"
+            ],
+            "preview/*": [
+                "../preview/*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/modules/preview/.valdi_build/projectsync/generated_ts/preview/*"
+            ],
+            "image_settings/*": [
+                "../image_settings/*"
+            ],
+            "serial/*": [
+                "../serial/*"
+            ],
+            "web_renderer/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/web_renderer/*"
+            ],
+            "tslib": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/src/tslib"
+            ]
+        },
+        "types": [
+            "../../bazel-src/external/valdi~/modules/types/Long",
+            "../../bazel-src/external/valdi~/modules/types/globals"
+        ],
+        "rootDirs": [
+            "..",
+            "../../bazel-out/darwin_arm64-fastbuild/bin/modules/ayab_valdi/.valdi_build/projectsync/generated_ts"
+        ]
+    }
+}

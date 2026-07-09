@@ -1,0 +1,76 @@
+name: Bug report
+description: Report something that isn't working correctly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please check [existing issues](https://github.com/clholgat/ayab-valdi/issues) first.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Web (browser)
+        - macOS (native)
+        - Android
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware mode
+      options:
+        - Simulation (no AYAB device)
+        - Real AYAB hardware
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do before the bug appeared?
+      placeholder: |
+        1. Open web app at localhost:3030
+        2. Load image ...
+        3. Click Knit ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Browser console output, terminal errors, or screenshots help a lot.
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser, Node version, Valdi version if known
+      placeholder: |
+        macOS 15.0, Chrome 131, Node 20.11, Valdi CLI 0.x
+    validations:
+      required: false
