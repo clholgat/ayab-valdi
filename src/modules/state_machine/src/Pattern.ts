@@ -194,7 +194,13 @@ export class Pattern {
       extractedWidth = imageWidth;
     }
 
-    // Ensure pattern height is set (used by Control.pat_height for row count and last-line detection)
+    // Ensure width/height reflect what was actually packed into patternExpanded
+    // (extractedWidth, center-cropped to machineWidth when the source image is
+    // wider), not the raw source image dimensions. Consumers like
+    // Control.select_needles_API6 derive patternExpanded's row stride from
+    // pattern.width - if it stayed at the raw imageWidth, row offsets beyond
+    // row 0 would be computed with the wrong stride and read garbled data.
+    this.width = extractedWidth;
     this.height = imageHeight;
 
     // For SINGLEBED mode: patternExpanded has num_colors rows per pattern row

@@ -25,6 +25,7 @@ import {
   CoreButtonSizing,
 } from "widgets/src/components/button/CoreButton";
 import { ZoomablePreviewViewport } from "./ZoomablePreviewViewport";
+import { computeZoomContentKey } from "./PreviewViewportTypes";
 import { getPreviewSideLabel } from "./KnitSidePreviewLogic";
 import {
   SamplePattern,
@@ -336,7 +337,13 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
                   totalRows={this.viewModel.totalRows}
                   isKnitting={this.viewModel.isKnitting}
                   aspectRatio={this.viewModel.aspectRatio}
-                  contentKey={`${this.state.width}x${this.state.height}-${this.state.bits!.length}-${this.viewModel.autoMirror ? "m" : "n"}-${this.viewModel.currentRow ?? -1}-${this.viewModel.aspectRatio ?? 0}`}
+                  contentKey={computeZoomContentKey(
+                    this.state.width!,
+                    this.state.height!,
+                    this.state.bits!.length,
+                    this.viewModel.autoMirror ?? false,
+                    this.viewModel.aspectRatio ?? 0,
+                  )}
                 />
               </layout>
               <layout style={styles.legendRow}>

@@ -4,6 +4,8 @@ import { Mode, Alignment } from "constants/src/StateMachineConstants";
 import { StateMachineState } from "constants/src/StateMachineConstants";
 import { KnitSession } from "ayab_valdi/src/KnitSession";
 import { prepareImageBitsForKnit } from "state_machine/src/ImageOrientation";
+import { Output } from "state_machine/src/Output";
+import { NullAudioFeedback } from "ayab_valdi/src/AudioFeedback";
 
 describe("KnitSession", () => {
   const settings = {
@@ -156,5 +158,59 @@ describe("KnitSession", () => {
     secondSession.cancel();
     await secondRun;
     expect(pleaseKnit).toBe(true);
+  });
+
+  it("does not emit feedback from an operate_async call that resolves after cancel()", async () => {
+    const bits = prepareImageBitsForKnit([
+      [new Uint8Array([0, 0, 0, 255])],
+    ]);
+    const start = KnitSession.tryStart({
+      imageBits: bits,
+      imageWidth: 1,
+      imageHeight: 1,
+      settings,
+      preferences: new Preferences(),
+      serialPort: "Simulation",
+    });
+    expect(start.ok).toBe(true);
+    if (!start.ok) {
+      return;
+    }
+    const session = start.session;
+
+    // Replace operate_async with a promise we control directly, so we can
+    // resolve it only *after* cancel() has already been called - simulating
+    // the in-flight-operation-resolves-post-cancel race.
+    let resolveOperate: ((output: Output) => void) | undefined;
+    (session.control as any).operate_async = () =>
+      new Promise<Output>((resolve) => {
+        resolveOperate = resolve;
+      });
+
+    const feedbackMessages: string[] = [];
+    const run = session.run({
+      onStatusVersion: () => {},
+      isDestroyed: () => false,
+      onFeedback: (message) => {
+        feedbackMessages.push(message.text);
+      },
+      quietMode: false,
+      audio: new NullAudioFeedback(),
+    });
+
+    // Wait for the loop to actually reach the operate_async call.
+    for (let i = 0; i < 40 && !resolveOperate; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(resolveOperate).toBeDefined();
+
+    session.cancel();
+    // Now resolve the in-flight operate_async call with an output that would
+    // normally produce a "Please knit." feedback message.
+    resolveOperate!(Output.PLEASE_KNIT);
+
+    await run;
+
+    expect(feedbackMessages).toEqual([]);
   });
 });

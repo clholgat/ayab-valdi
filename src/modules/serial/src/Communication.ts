@@ -18,6 +18,125 @@ const SLIP_ESC = 0xdb;
 const SLIP_ESC_END = 0xdc;
 const SLIP_ESC_ESC = 0xdd;
 
+// How long read_API6_async waits for a response before giving up. Without this,
+// a device that goes silent mid-session (firmware hang, cable pulled without an
+// OS disconnect event) leaves the awaiting promise pending forever, freezing the
+// state machine's polling loop permanently instead of just failing that one poll.
+export const READ_API6_TIMEOUT_MS = 5000;
+
+/**
+ * Races `promise` against a timeout. If `promise` doesn't settle within
+ * `timeoutMs`, calls `onTimeout` (for cleanup - e.g. unregistering a resolver)
+ * and rejects. Whichever settles first "wins"; the loser is ignored.
+ */
+export function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      onTimeout();
+      reject(new Error(`Timed out after ${timeoutMs}ms waiting for serial data`));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+/**
+ * Pure SLIP decode step: given the leftover buffer from the previous call and a
+ * newly-read chunk, returns any complete frames plus the leftover bytes to carry
+ * into the next call. A frame that hasn't hit SLIP_END yet must be preserved in
+ * full (from where it started) rather than dropped once `data` runs out.
+ */
+export function slipDecodeChunk(
+  rxBuffer: Uint8Array,
+  data: Uint8Array,
+): { frames: Uint8Array[]; remaining: Uint8Array; bytesConsumedFromData: number } {
+  const frames: Uint8Array[] = [];
+
+  const combined = new Uint8Array(rxBuffer.length + data.length);
+  combined.set(rxBuffer);
+  combined.set(data, rxBuffer.length);
+
+  let frame: number[] = [];
+  let i = 0;
+  // Position where the current (possibly still-incomplete) frame started.
+  // Defaults to 0: if we never see a SLIP_END this call, any bytes collected
+  // so far belong to a frame that started at-or-before the start of `combined`.
+  let frameStart = 0;
+
+  while (i < combined.length) {
+    const byte = combined[i];
+
+    if (byte === SLIP_END) {
+      // End of frame
+      if (frame.length > 0) {
+        frames.push(new Uint8Array(frame));
+        frame = [];
+      }
+      frameStart = i + 1;
+      i++;
+    } else if (byte === SLIP_ESC) {
+      // Escape sequence
+      if (i + 1 < combined.length) {
+        const nextByte = combined[i + 1];
+        if (nextByte === SLIP_ESC_END) {
+          frame.push(SLIP_END);
+          i += 2;
+        } else if (nextByte === SLIP_ESC_ESC) {
+          frame.push(SLIP_ESC);
+          i += 2;
+        } else {
+          // Invalid escape sequence, skip ESC byte
+          frame.push(byte);
+          i++;
+        }
+      } else {
+        // Incomplete escape sequence, keep in buffer
+        break;
+      }
+    } else {
+      frame.push(byte);
+      i++;
+    }
+  }
+
+  // Calculate how many bytes from the data parameter were consumed
+  const bytesConsumedFromData = Math.max(0, i - rxBuffer.length);
+
+  // Save remaining data in buffer (for next call). If a frame is still in
+  // progress (no SLIP_END seen since it started), keep everything from
+  // frameStart onward instead of just from the loop cursor `i` — otherwise
+  // an in-progress frame that spans multiple reads is silently dropped.
+  const remaining = frame.length > 0 ? combined.slice(frameStart) : combined.slice(i);
+
+  return { frames, remaining, bytesConsumedFromData };
+}
+
 export class Communication implements ICommunication {
   private rxMsgList: Uint8Array[] = [];
   private rxBuffer: Uint8Array = new Uint8Array(0);
@@ -229,59 +348,8 @@ export class Communication implements ICommunication {
   // bytesConsumedFromData indicates how many bytes from the data parameter were consumed
   // (used to know how much of g_readBuffer to clear)
   private slipDecode(data: Uint8Array): [Uint8Array[], number] {
-    const frames: Uint8Array[] = [];
-
-    // Combine with existing buffer (for incomplete frames from previous reads)
-    const combined = new Uint8Array(this.rxBuffer.length + data.length);
-    combined.set(this.rxBuffer);
-    combined.set(data, this.rxBuffer.length);
-
-    let frame: number[] = [];
-    let i = 0;
-
-    while (i < combined.length) {
-      const byte = combined[i];
-
-      if (byte === SLIP_END) {
-        // End of frame
-        if (frame.length > 0) {
-          frames.push(new Uint8Array(frame));
-          frame = [];
-        }
-        i++;
-      } else if (byte === SLIP_ESC) {
-        // Escape sequence
-        if (i + 1 < combined.length) {
-          const nextByte = combined[i + 1];
-          if (nextByte === SLIP_ESC_END) {
-            frame.push(SLIP_END);
-            i += 2;
-          } else if (nextByte === SLIP_ESC_ESC) {
-            frame.push(SLIP_ESC);
-            i += 2;
-          } else {
-            // Invalid escape sequence, skip ESC byte
-            frame.push(byte);
-            i++;
-          }
-        } else {
-          // Incomplete escape sequence, keep in buffer
-          break;
-        }
-      } else {
-        frame.push(byte);
-        i++;
-      }
-    }
-
-    // Calculate how many bytes from the data parameter were consumed
-    // i is the position in combined buffer, this.rxBuffer.length is how much came from previous buffer
-    // So bytes consumed from data = i - this.rxBuffer.length (but not less than 0)
-    const bytesConsumedFromData = Math.max(0, i - this.rxBuffer.length);
-
-    // Save remaining data in buffer (for next call)
-    this.rxBuffer = combined.slice(i);
-
+    const { frames, remaining, bytesConsumedFromData } = slipDecodeChunk(this.rxBuffer, data);
+    this.rxBuffer = remaining;
     return [frames, bytesConsumedFromData];
   }
 
@@ -345,6 +413,24 @@ export class Communication implements ICommunication {
       let resolved = false;
       let removeResolver: (() => void) | null = null;
 
+      // Bail out after READ_API6_TIMEOUT_MS instead of waiting forever: without
+      // this, a device that stops responding mid-session leaves this promise -
+      // and the caller awaiting it - hung permanently.
+      const timeoutId = setTimeout(function () {
+        if (resolved) {
+          return;
+        }
+        resolved = true;
+        if (removeResolver) {
+          removeResolver();
+        }
+        reject(
+          new Error(
+            `read_API6_async: timed out after ${READ_API6_TIMEOUT_MS}ms waiting for serial data`,
+          ),
+        );
+      }, READ_API6_TIMEOUT_MS);
+
       // Resolver function that gets called when data arrives in background readLoop
       // This will be called when data is available
       // It will ONLY resolve when there's actually a complete message available
@@ -359,6 +445,7 @@ export class Communication implements ICommunication {
 
         if (!is_open()) {
           resolved = true;
+          clearTimeout(timeoutId);
           if (removeResolver) {
             removeResolver();
           }
@@ -382,6 +469,7 @@ export class Communication implements ICommunication {
           // Return the oldest message if available
           if (self.rxMsgList.length > 0) {
             resolved = true;
+            clearTimeout(timeoutId);
             if (removeResolver) {
               removeResolver();
             }
@@ -406,10 +494,14 @@ export class Communication implements ICommunication {
           console.error(
             "read_API6_async: registerDataAvailableResolver not available",
           );
+          resolved = true;
+          clearTimeout(timeoutId);
           resolve(null);
         }
       } catch (err: any) {
         console.error("read_API6_async: Error registering resolver:", err);
+        resolved = true;
+        clearTimeout(timeoutId);
         resolve(null);
       }
     });

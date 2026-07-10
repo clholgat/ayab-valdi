@@ -8,10 +8,12 @@ import {
   runAppKnit,
   sendAppHardwareTestCommand,
 } from "ayab_valdi/src/AppSessions";
+import { KnitSession } from "ayab_valdi/src/KnitSession";
 import { ValueNotifier } from "ayab_valdi/src/ValueNotifier";
 import { NullAudioFeedback } from "ayab_valdi/src/AudioFeedback";
 import { ImageSettings } from "image_settings/src/ImageSettingsComponent";
 import { Mode, Alignment } from "constants/src/StateMachineConstants";
+import { prepareImageBitsForKnit } from "state_machine/src/ImageOrientation";
 
 function makeSettings(): ImageSettings {
   return {
@@ -99,5 +101,69 @@ describe("AppSessions", () => {
     closeAppHardwareTest(undefined, log, ready);
     expect(log.get()).toBe("");
     expect(ready.get()).toBe(false);
+  });
+
+  it("does not invoke callbacks if the caller was destroyed while awaiting a prior active knit run", async () => {
+    const bits = prepareImageBitsForKnit([[new Uint8Array([0, 0, 0, 255])]]);
+    const params = {
+      settings: makeSettings(),
+      isKnitting: false,
+      imageBits: bits,
+      imageWidth: 1,
+      imageHeight: 1,
+      preferences: new Preferences(),
+      serialPort: "Simulation",
+      audio: new NullAudioFeedback(),
+    };
+
+    // Call #1: starts a real (Simulation) knit run, becoming the module-level
+    // activeKnitRun that a second, later call will have to await.
+    let firstSession: KnitSession | undefined;
+    const firstCall = runAppKnit(params, {
+      onValidationError: () => fail("call #1 should not hit a validation error"),
+      onKnitStarted: (session) => {
+        firstSession = session;
+      },
+      onStatusVersion: () => {},
+      onFeedback: () => {},
+      onKnitFinished: () => {},
+      onKnitRuntimeError: () => {},
+      isDestroyed: () => false,
+    });
+
+    // Wait for call #1 to actually start (onKnitStarted is synchronous once
+    // tryStart succeeds), then immediately start call #2 - representing a
+    // later startKnit() invocation whose caller (e.g. the App component) has
+    // since been destroyed.
+    for (let i = 0; i < 40 && !firstSession; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(firstSession).toBeDefined();
+
+    let secondValidationError = false;
+    let secondKnitStarted = false;
+    const secondCall = runAppKnit(params, {
+      onValidationError: () => {
+        secondValidationError = true;
+      },
+      onKnitStarted: () => {
+        secondKnitStarted = true;
+      },
+      onStatusVersion: () => {},
+      onFeedback: () => {},
+      onKnitFinished: () => {},
+      onKnitRuntimeError: () => {},
+      // Simulates the component being destroyed before call #2's
+      // await activeKnitRun resolves.
+      isDestroyed: () => true,
+    });
+
+    // Let call #1 finish quickly instead of running a full simulated knit.
+    firstSession?.cancel();
+
+    await Promise.all([firstCall, secondCall]);
+
+    expect(secondValidationError).toBe(false);
+    expect(secondKnitStarted).toBe(false);
   });
 });

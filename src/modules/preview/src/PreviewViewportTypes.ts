@@ -1,3 +1,19 @@
+/**
+ * Key ZoomablePreviewViewport uses to detect "this is genuinely new content"
+ * and reset zoom to 100%. Deliberately excludes knit progress (currentRow) -
+ * that changes on every knit row and must NOT reset the user's zoom/pan while
+ * they're actively watching a knit in progress.
+ */
+export function computeZoomContentKey(
+  width: number,
+  height: number,
+  bitsLength: number,
+  autoMirror: boolean,
+  aspectRatio: number,
+): string {
+  return `${width}x${height}-${bitsLength}-${autoMirror ? "m" : "n"}-${aspectRatio}`;
+}
+
 export interface ZoomablePreviewViewportViewModel {
   bits: Uint8Array[][];
   imageWidth: number;

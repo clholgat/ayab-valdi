@@ -5,13 +5,14 @@
 import { flipRowsVertical } from "state_machine/src/ImageOrientation";
 import { mirrorHorizontal } from "./PreviewTransforms";
 
+/** Rotate 90 degrees counter-clockwise (left turn). */
 export function rotateLeft(bits: Uint8Array[][]): Uint8Array[][] {
   const height = bits.length;
   const width = height > 0 ? bits[0]!.length : 0;
   const rotated: Uint8Array[][] = [];
-  for (let col = 0; col < width; col++) {
+  for (let col = width - 1; col >= 0; col--) {
     const row: Uint8Array[] = [];
-    for (let rowIndex = height - 1; rowIndex >= 0; rowIndex--) {
+    for (let rowIndex = 0; rowIndex < height; rowIndex++) {
       row.push(bits[rowIndex]![col]!);
     }
     rotated.push(row);
@@ -19,13 +20,14 @@ export function rotateLeft(bits: Uint8Array[][]): Uint8Array[][] {
   return rotated;
 }
 
+/** Rotate 90 degrees clockwise (right turn). */
 export function rotateRight(bits: Uint8Array[][]): Uint8Array[][] {
   const height = bits.length;
   const width = height > 0 ? bits[0]!.length : 0;
   const rotated: Uint8Array[][] = [];
-  for (let col = width - 1; col >= 0; col--) {
+  for (let col = 0; col < width; col++) {
     const row: Uint8Array[] = [];
-    for (let rowIndex = 0; rowIndex < height; rowIndex++) {
+    for (let rowIndex = height - 1; rowIndex >= 0; rowIndex--) {
       row.push(bits[rowIndex]![col]!);
     }
     rotated.push(row);

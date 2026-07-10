@@ -127,6 +127,8 @@ export class ImageSettingsComponentInner extends StatefulComponent<
     stretchVText: "1",
   };
 
+  private unsubscribePreferences?: () => void;
+
   private get preferences(): Preferences {
     return this.viewModel.providersValues[0];
   }
@@ -140,6 +142,17 @@ export class ImageSettingsComponentInner extends StatefulComponent<
     ) {
       this.updateNeedlesFromImageDimensions();
     }
+    // Keep in sync with e.g. "Reset defaults" in PreferencesScreen while this
+    // panel stays mounted elsewhere in the tree.
+    this.unsubscribePreferences = this.preferences.onChanged(() => {
+      if (!this.isDestroyed()) {
+        this.loadFromPreferences();
+      }
+    });
+  }
+
+  onDestroy(): void {
+    this.unsubscribePreferences?.();
   }
 
   onViewModelUpdate(previous?: ImageSettingsInnerViewModel): void {

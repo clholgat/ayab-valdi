@@ -175,7 +175,7 @@ function decryptNextBlock(
   targetHeight: number,
 ): { blocks: StpBlock[]; nextPos: number } {
   const blocks: StpBlock[] = [];
-  while (true) {
+  while (pos < inputData.length) {
     const block = new StpBlock(inputData, pos, xorkey);
     blocks.push(block);
     pos += block.size + 4;
@@ -183,6 +183,10 @@ function decryptNextBlock(
       return { blocks, nextPos: pos };
     }
   }
+  throw new PatternImportError(
+    ".stp file is truncated or corrupted (no block matches the pattern height)",
+    -5,
+  );
 }
 
 function decodeStpRuns(

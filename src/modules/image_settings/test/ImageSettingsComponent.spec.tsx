@@ -6,6 +6,7 @@ import { IComponent } from "valdi_core/src/IComponent";
 import { Preferences } from "app_settings/src/Preferences";
 import { PreferencesProvider } from "app_settings/src/PreferencesProvider";
 import { InMemoryPreferenceStorage } from "app_settings/src/PreferenceStorage";
+import { Alignment } from "constants/src/StateMachineConstants";
 import {
   ImageSettingsComponent,
   ImageSettingsViewModel,
@@ -150,4 +151,29 @@ describe("ImageSettingsComponent", () => {
       "Match your cast-on",
     );
   });
+
+  valdiIt(
+    "picks up preference resets while mounted instead of showing stale values",
+    async (driver) => {
+      const prefs = await makePreferences();
+      // Start from a non-default alignment so the reset is observable.
+      prefs.defaultAlignment = Alignment.RIGHT;
+
+      const onSettingsChange = jasmine.createSpy("onSettingsChange");
+      renderImageSettings(driver, prefs, makeViewModel({ onSettingsChange }));
+
+      expect(onSettingsChange).toHaveBeenCalledWith(
+        jasmine.objectContaining({ alignment: Alignment.RIGHT }),
+      );
+      onSettingsChange.calls.reset();
+
+      // Simulates tapping "Reset defaults" in PreferencesScreen while this
+      // panel is still mounted elsewhere in the tree.
+      await prefs.reset();
+
+      expect(onSettingsChange).toHaveBeenCalledWith(
+        jasmine.objectContaining({ alignment: Alignment.CENTER }),
+      );
+    },
+  );
 });

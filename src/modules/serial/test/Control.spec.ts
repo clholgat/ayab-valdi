@@ -58,6 +58,57 @@ describe("Control.select_needles_API6", () => {
     expect(bits.length).toBe(25);
   });
 
+  it("reads correct needle bits for row 1+ when the source image is wider than the machine", () => {
+    // Image is wider than the machine (250 > 200), so processPatternData()
+    // center-crops to a narrower extractedWidth when packing patternExpanded.
+    // Row 0 is white (not selected in the black/color-1 plane), row 1 is solid
+    // black (selected everywhere in the needle range). If Pattern.width isn't
+    // updated to match the packed width, select_needles_API6's byte-offset
+    // math for row 1 reads from the wrong place in patternExpanded.
+    const machineWidth = Machine.width(Machine.KH910_KH950); // 200
+    const overWidth = 250;
+    const white = new Uint8Array([255, 255, 255, 255]);
+    const black = new Uint8Array([0, 0, 0, 255]);
+    const imageRows = [solidRow(overWidth, white), solidRow(overWidth, black)];
+    const image = new PatternImage(imageRows, overWidth, 2, 2);
+    const pattern = new Pattern(image, 2);
+    pattern.alignment = Alignment.LEFT;
+    pattern.knitStartNeedle = 0;
+    pattern.knitEndNeedle = machineWidth;
+    pattern.calcPatStartEndNeedles();
+    pattern.processPatternData(machineWidth, 2, 0, machineWidth - 1);
+
+    // processPatternData must record the width it actually packed
+    // patternExpanded with, not the raw (wider) source image width.
+    expect(pattern.width).toBe(machineWidth);
+
+    const control = new Control();
+    control.machine = Machine.KH910_KH950;
+    control.mode = Mode.SINGLEBED;
+    control.num_colors = 2;
+    control.pattern = pattern;
+    control.start_needle = 0;
+    control.end_needle = machineWidth;
+    control.start_pixel = 0;
+    control.end_pixel = machineWidth;
+
+    // expandedRowIndex = numColors * patRow + color -> row 1 (black), color 1 = index 3
+    const blackRowBits = control.select_needles_API6(1, 3, false);
+    for (let i = 0; i < machineWidth; i++) {
+      expect(((blackRowBits[Math.floor(i / 8)]! >> (i % 8)) & 1) !== 0).toBe(
+        true,
+      );
+    }
+
+    // row 0 (white), color 1 = index 1 -> nothing selected in the black plane
+    const whiteRowBits = control.select_needles_API6(1, 1, false);
+    for (let i = 0; i < machineWidth; i++) {
+      expect(((whiteRowBits[Math.floor(i / 8)]! >> (i % 8)) & 1) !== 0).toBe(
+        false,
+      );
+    }
+  });
+
   it("sets flanking needles for ribber color 0", () => {
     const pattern = makeLeftAlignedPattern(20, 1);
     const control = new Control();

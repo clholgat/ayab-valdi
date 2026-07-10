@@ -78,6 +78,10 @@ export class HardwareTestSession {
 
         const output = await this.nextOutput();
 
+        if (this.cancelled) {
+          break;
+        }
+
         const message = Feedback.forOutput(output);
         if (message != null && callbacks.onFeedback) {
           callbacks.onFeedback(message);

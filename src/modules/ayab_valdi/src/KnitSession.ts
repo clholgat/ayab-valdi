@@ -168,6 +168,10 @@ export class KnitSession {
             return Output.NONE;
           });
 
+        if (this.cancelled) {
+          break;
+        }
+
         if (output !== this.control.notification) {
           KnitSession.emitFeedback(output, callbacks);
           this.control.notification = output;

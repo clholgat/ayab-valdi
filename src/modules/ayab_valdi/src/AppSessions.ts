@@ -42,6 +42,12 @@ export async function runAppKnit(
 ): Promise<void> {
   if (activeKnitRun) {
     await activeKnitRun;
+    // The caller (e.g. App) may have been destroyed while we were waiting
+    // for the previous knit run to finish - bail out before touching any of
+    // its callbacks (they'd otherwise setState on a destroyed component).
+    if (callbacks.isDestroyed()) {
+      return;
+    }
   }
 
   const { settings, isKnitting } = params;
