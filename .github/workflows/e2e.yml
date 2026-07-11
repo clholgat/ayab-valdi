@@ -12,14 +12,18 @@ jobs:
     # binary is linked against libtinfo.so.5, which 24.04+ dropped in favor of
     # libtinfo.so.6 (a different, ABI-incompatible major soname - symlinking
     # the .so.6 file onto the .so.5 name isn't enough, since clang needs
-    # symbol version NCURSES_TINFO_5.0 that .so.6 doesn't export). 22.04
-    # ships libtinfo5 directly.
+    # symbol version NCURSES_TINFO_5.0 that .so.6 doesn't export). The
+    # libtinfo5 package is still in 22.04's apt repos (installed below);
+    # 24.04's repos dropped it entirely.
     runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: src
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install libtinfo5
+        run: sudo apt-get update && sudo apt-get install -y libtinfo5
 
       - name: Free disk space
         run: |
