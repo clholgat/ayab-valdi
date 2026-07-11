@@ -47,6 +47,17 @@ jobs:
           cache: "npm"
           cache-dependency-path: src/web/package-lock.json
 
+      - name: Install libtinfo5 compatibility symlink
+        run: |
+          # Valdi's pinned LLVM toolchain (clang) dynamically links against
+          # libtinfo.so.5, which ubuntu-latest (24.04+) no longer ships (it
+          # only has libtinfo.so.6). Without this, `Build ayab_web` fails with
+          # "clang: error while loading shared libraries: libtinfo.so.5:
+          # cannot open shared object file". Symlink the ABI-compatible
+          # libtinfo6 onto the name clang expects.
+          LIB=$(ldconfig -p | grep libtinfo.so.6 | awk '{print $NF}' | head -1)
+          sudo ln -sf "$LIB" "$(dirname "$LIB")/libtinfo.so.5"
+
       - name: Build ayab_web
         run: bazel build :ayab_web --define disable_minify_web=true
 
