@@ -8,7 +8,13 @@ on:
 
 jobs:
   web-e2e:
-    runs-on: ubuntu-latest
+    # Pinned to 22.04 (not ubuntu-latest): Valdi's pinned LLVM/clang toolchain
+    # binary is linked against libtinfo.so.5, which 24.04+ dropped in favor of
+    # libtinfo.so.6 (a different, ABI-incompatible major soname - symlinking
+    # the .so.6 file onto the .so.5 name isn't enough, since clang needs
+    # symbol version NCURSES_TINFO_5.0 that .so.6 doesn't export). 22.04
+    # ships libtinfo5 directly.
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: src
@@ -46,17 +52,6 @@ jobs:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: src/web/package-lock.json
-
-      - name: Install libtinfo5 compatibility symlink
-        run: |
-          # Valdi's pinned LLVM toolchain (clang) dynamically links against
-          # libtinfo.so.5, which ubuntu-latest (24.04+) no longer ships (it
-          # only has libtinfo.so.6). Without this, `Build ayab_web` fails with
-          # "clang: error while loading shared libraries: libtinfo.so.5:
-          # cannot open shared object file". Symlink the ABI-compatible
-          # libtinfo6 onto the name clang expects.
-          LIB=$(ldconfig -p | grep libtinfo.so.6 | awk '{print $NF}' | head -1)
-          sudo ln -sf "$LIB" "$(dirname "$LIB")/libtinfo.so.5"
 
       - name: Build ayab_web
         run: bazel build :ayab_web --define disable_minify_web=true
