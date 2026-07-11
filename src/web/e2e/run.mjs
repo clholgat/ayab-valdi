@@ -17,6 +17,7 @@ import {
   knitCancelRestartSimulationSpec,
   knitCancelRestartWebSerialSpec,
 } from "./specs/knit-cancel-restart.mjs";
+import { knitNaturalCompletionSpec } from "./specs/knit-natural-completion.mjs";
 import { startAyabWsServer } from "./helpers/ayabWsServer.mjs";
 
 const webDir = new URL("..", import.meta.url).pathname;
@@ -24,7 +25,7 @@ const webDir = new URL("..", import.meta.url).pathname;
 console.log("Building ayab_web for E2E...");
 execSync("npm run ensure-ayab-web", { cwd: webDir, stdio: "inherit" });
 
-const specs = [
+const allSpecs = [
   { name: "smoke", fn: smokeSpec },
   { name: "load-image", fn: loadImageSpec },
   { name: "load-pat", fn: loadPatSpec },
@@ -36,7 +37,12 @@ const specs = [
   { name: "progress-stitch", fn: progressStitchSpec },
   { name: "knit-cancel-restart", fn: knitCancelRestartSimulationSpec },
   { name: "knit-cancel-restart-ws", fn: knitCancelRestartWebSerialSpec },
+  { name: "knit-natural-completion", fn: knitNaturalCompletionSpec },
 ];
+
+// E2E_ONLY=comma,separated,names to run a subset while iterating locally.
+const only = process.env.E2E_ONLY?.split(",").map((s) => s.trim());
+const specs = only ? allSpecs.filter((s) => only.includes(s.name)) : allSpecs;
 
 let serverChild = null;
 let browser = null;

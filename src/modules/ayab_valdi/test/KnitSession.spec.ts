@@ -160,6 +160,39 @@ describe("KnitSession", () => {
     expect(pleaseKnit).toBe(true);
   });
 
+  it("resolves 'finished' and reaches FINISHED state when a simulated knit completes naturally (no cancel)", async () => {
+    const bits = prepareImageBitsForKnit([
+      [new Uint8Array([0, 0, 0, 255])],
+    ]);
+    const start = KnitSession.tryStart({
+      imageBits: bits,
+      imageWidth: 1,
+      imageHeight: 1,
+      settings,
+      preferences: new Preferences(),
+      serialPort: "Simulation",
+    });
+    expect(start.ok).toBe(true);
+    if (!start.ok) {
+      return;
+    }
+    const session = start.session;
+
+    const result = await Promise.race([
+      session.run({
+        onStatusVersion: () => {},
+        isDestroyed: () => false,
+        onFeedback: () => {},
+      }),
+      new Promise<"timed-out">((resolve) =>
+        setTimeout(() => resolve("timed-out"), 15000),
+      ),
+    ]);
+
+    expect(result).toBe("finished");
+    expect(session.control.state).toBe(StateMachineState.FINISHED);
+  });
+
   it("does not emit feedback from an operate_async call that resolves after cancel()", async () => {
     const bits = prepareImageBitsForKnit([
       [new Uint8Array([0, 0, 0, 255])],

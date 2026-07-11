@@ -132,7 +132,16 @@ export function orderPaletteByFrequency(
 
   let destMap: number[];
   if (mode === Mode.SINGLEBED) {
-    destMap = palette.map((_c, i) => i);
+    // The darkest color must land at index 0: ModeFunc.singlebed() always
+    // reads color plane 0 as the needle-selected/foreground color (matches
+    // ayab-desktop's own reference behavior - see ModeFunc.spec.ts), so
+    // whichever palette entry is closest to black needs to end up there
+    // deterministically - not wherever the median-cut quantizer's box order
+    // happened to put it, which varies per image.
+    const luminance = (c: [number, number, number]) => c[0] + c[1] + c[2];
+    destMap = palette
+      .map((_c, i) => i)
+      .sort((a, b) => luminance(palette[b]!) - luminance(palette[a]!));
   } else {
     destMap = palette
       .map((_c, i) => i)

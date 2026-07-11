@@ -1,8 +1,9 @@
-import { Component } from "valdi_core/src/Component";
+import { StatefulComponent } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
 import { View, Layout, Label } from "valdi_tsx/src/NativeTemplateElements";
 import { sansBoldFont, sansFont, BUTTON_FONT_TINY } from "constants/src/Typography";
 import { APP_NAME, APP_VERSION, APP_REPO_URL, APP_URL } from "constants/src/AppInfo";
+import { reportBug } from "./BugReport";
 import {
   SIDEBAR_CARD_BACKGROUND,
   SIDEBAR_CARD_BORDER,
@@ -21,7 +22,23 @@ export interface AboutScreenViewModel {
   closeAccessibilityId?: string;
 }
 
-export class AboutScreen extends Component<AboutScreenViewModel> {
+interface AboutScreenState {
+  linkCopied: boolean;
+}
+
+export class AboutScreen extends StatefulComponent<
+  AboutScreenViewModel,
+  AboutScreenState
+> {
+  state: AboutScreenState = { linkCopied: false };
+
+  private handleReportBug = (): void => {
+    const result = reportBug();
+    if (!result.opened) {
+      this.setState({ linkCopied: true });
+    }
+  };
+
   onRender(): void {
     const closeLabel = this.viewModel.closeLabel ?? "Close";
     const closeId = this.viewModel.closeAccessibilityId ?? "about-close";
@@ -61,6 +78,26 @@ export class AboutScreen extends Component<AboutScreenViewModel> {
         />
         <label style={styles.linkLabel} value="Upstream AYAB" />
         <label style={styles.link} value={APP_URL} />
+        <layout style={styles.buttonRow}>
+          <CoreButton
+            accessibilityId="about-report-bug"
+            key="about-report-bug"
+            text="Report a bug"
+            onTap={this.handleReportBug}
+            coloring={CoreButtonColoring.SECONDARY}
+            sizing={CoreButtonSizing.TINY}
+            font={BUTTON_FONT_TINY}
+            width="100%"
+          />
+        </layout>
+        {this.state.linkCopied ? (
+          <label
+            accessibilityId="about-report-bug-copied"
+            key="about-report-bug-copied"
+            style={styles.copiedNotice}
+            value="Bug report link copied to clipboard — paste it into your browser."
+          />
+        ) : undefined}
         <layout style={styles.buttonRow}>
           <CoreButton
             accessibilityId={closeId}
@@ -109,5 +146,12 @@ const styles = {
   buttonRow: new Style<Layout>({
     width: "100%",
     marginTop: 4,
+  }),
+  copiedNotice: new Style<Label>({
+    font: sansFont(11),
+    color: "#059669",
+    marginTop: 4,
+    marginBottom: 4,
+    numberOfLines: 0,
   }),
 };

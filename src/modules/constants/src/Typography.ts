@@ -1,20 +1,28 @@
 /**
- * Single sans-serif stack for all Valdi `font` attributes (format: "family size [unscaled]").
- * Weight is NOT a separate token - Valdi's font parser resolves it from a
- * "-weight" suffix on the family name itself (e.g. "sans-serif-bold"), so
- * bold variants must be requested via a distinct family name, not a third
- * space-separated token (that position is only ever checked for the literal
- * "unscaled" flag and silently ignored otherwise).
+ * Single sans-serif stack for all Valdi `font` attributes (format: "family size [weight]").
+ *
+ * NOTE: this "family size weight" 3-token format is what the *web* renderer
+ * (ValdiWebStyles.ts: `value.split(' ')` -> fontFamily/fontSize/fontWeight)
+ * expects, and "sans-serif"/"600" are both valid CSS values there, so bold
+ * renders correctly on web. Valdi's *native* font parser instead resolves
+ * weight from a "-bold" suffix on the family name (and only recognizes it
+ * for the literal built-in names "system"/"system-bold", not arbitrary
+ * families like "sans-serif") - the web renderer has no equivalent
+ * special-casing, so switching to a "-bold" suffixed family name to satisfy
+ * native breaks web (the suffixed name isn't a real font, so the browser
+ * falls back to its default - usually serif). There's no single string this
+ * codebase's Valdi build accepts that renders bold correctly on both
+ * platforms, so this keeps the web-correct format; native bold text
+ * (macOS/Android) is a known, separate, currently-unresolved gap.
  */
 const SANS = "sans-serif";
-const SANS_BOLD = "sans-serif-bold";
 
 export function sansFont(size: number): string {
   return `${SANS} ${size}`;
 }
 
 export function sansBoldFont(size: number): string {
-  return `${SANS_BOLD} ${size}`;
+  return `${SANS} ${size} 600`;
 }
 
 /** CoreButton SMALL sizing — matches SUBHEADLINE_EMPHASIS at 14px. */

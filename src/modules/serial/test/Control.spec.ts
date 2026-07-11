@@ -50,12 +50,41 @@ describe("Control.select_needles_API6", () => {
     control.start_pixel = 0;
     control.end_pixel = 40;
 
-    const bits = control.select_needles_API6(0, 0, false);
-    expect(Array.from(bits.slice(0, 5))).toEqual([0, 0, 0, 0, 0]);
-
-    const blackPass = control.select_needles_API6(1, 1, false);
+    // Row 0 (patRow=0) is black. ColorQuantization deterministically puts
+    // the darkest color at index 0, so color plane 0 is the selected/black
+    // plane and color plane 1 is the unselected/white plane.
+    const blackPass = control.select_needles_API6(0, 0, false);
     expect(Array.from(blackPass.slice(0, 5))).toEqual([255, 255, 255, 255, 255]);
+
+    const bits = control.select_needles_API6(1, 1, false);
+    expect(Array.from(bits.slice(0, 5))).toEqual([0, 0, 0, 0, 0]);
     expect(bits.length).toBe(25);
+  });
+
+  it("selects the darkest color's needles for a black row via the real singlebed mode_func (not white)", () => {
+    // Exercises func_selector()+mode_func dispatch end to end, unlike the
+    // test above which passes color/row_index directly and so can't catch a
+    // bug in ModeFunc.singlebed()'s color selection itself.
+    const pattern = makeLeftAlignedPattern(40, 3);
+    const control = new Control();
+    control.machine = Machine.KH910_KH950;
+    control.mode = Mode.SINGLEBED;
+    control.num_colors = 2;
+    control.start_row = 0;
+    control.inf_repeat = false;
+    control.pat_height = pattern.height;
+    control.pattern = pattern;
+    control.start_needle = 0;
+    control.end_needle = 40;
+    control.start_pixel = 0;
+    control.end_pixel = 40;
+
+    expect(control.func_selector()).toBe(true);
+
+    // Row 0 of makeLeftAlignedPattern is solid black; rows 1-2 are white.
+    const [color, row_index, blank_line] = control.mode_func(control, 0);
+    const bits = control.select_needles_API6(color, row_index, blank_line);
+    expect(Array.from(bits.slice(0, 5))).toEqual([255, 255, 255, 255, 255]);
   });
 
   it("reads correct needle bits for row 1+ when the source image is wider than the machine", () => {
@@ -92,16 +121,18 @@ describe("Control.select_needles_API6", () => {
     control.start_pixel = 0;
     control.end_pixel = machineWidth;
 
-    // expandedRowIndex = numColors * patRow + color -> row 1 (black), color 1 = index 3
-    const blackRowBits = control.select_needles_API6(1, 3, false);
+    // Black is palette index 0 (darkest), so the selected/black plane is
+    // color 0. expandedRowIndex = numColors * patRow + color -> row 1
+    // (black), color 0 = index 2.
+    const blackRowBits = control.select_needles_API6(0, 2, false);
     for (let i = 0; i < machineWidth; i++) {
       expect(((blackRowBits[Math.floor(i / 8)]! >> (i % 8)) & 1) !== 0).toBe(
         true,
       );
     }
 
-    // row 0 (white), color 1 = index 1 -> nothing selected in the black plane
-    const whiteRowBits = control.select_needles_API6(1, 1, false);
+    // row 0 (white), color 0 = index 0 -> nothing selected in the black plane
+    const whiteRowBits = control.select_needles_API6(0, 0, false);
     for (let i = 0; i < machineWidth; i++) {
       expect(((whiteRowBits[Math.floor(i / 8)]! >> (i % 8)) & 1) !== 0).toBe(
         false,

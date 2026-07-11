@@ -34,6 +34,7 @@ export interface AppSidebarViewModel {
   activeTourTargetId?: string;
   tourBubble?: ActiveTourBubble | null;
   onOpenSettings: () => void;
+  onReportBug: () => void;
   onSerialPortChange: (serialPort: string) => void;
   onSettingsChange: (settings: ImageSettings) => void;
   onStretchChange: (stretchH: number, stretchV: number) => void;
@@ -67,6 +68,17 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
               sizing={CoreButtonSizing.SMALL}
               font={BUTTON_FONT_SMALL}
               disabled={vm.sessionLocked}
+              width="100%"
+            />
+          </layout>
+          <layout style={styles.settingsButtonRow}>
+            <CoreButton
+              accessibilityId="sidebar-report-bug-button"
+              text="Report a bug"
+              onTap={vm.onReportBug}
+              coloring={CoreButtonColoring.SECONDARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
               width="100%"
             />
           </layout>

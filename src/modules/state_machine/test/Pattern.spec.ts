@@ -80,8 +80,12 @@ describe("Pattern", () => {
 
     const bytesPerRow = Math.ceil(machineWidth / 8);
     expect(pattern.patternExpanded.length).toBe(2 * bytesPerRow);
+    // Singlebed mode always reads color plane 0 as the needle-selected
+    // color, and ColorQuantization deterministically puts the darkest
+    // color (black, here) at index 0 - so the black pixel's bit lives in
+    // the first plane, not the second.
     expect(
-      bitIsSet(pattern.patternExpanded.subarray(bytesPerRow, bytesPerRow * 2), 0),
+      bitIsSet(pattern.patternExpanded.subarray(0, bytesPerRow), 0),
     ).toBe(true);
   });
 

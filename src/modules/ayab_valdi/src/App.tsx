@@ -27,6 +27,7 @@ import {
 } from "./AudioFeedback";
 import { PlatformAudioFeedback } from "./PlatformAudioFeedback";
 import { AppSidebar } from "./AppSidebar";
+import { reportBug } from "app_settings/src/BugReport";
 import { createAppImageHandlers } from "./AppImageHandlers";
 import { ActiveTourBubble } from "./InlineTourBubble";
 import {
@@ -276,6 +277,18 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     this.setState({ showPreferences: true });
   };
 
+  private handleReportBug = (): void => {
+    const result = reportBug();
+    if (!result.opened) {
+      this.setState({
+        userMessage: {
+          text: "Bug report link copied to clipboard — paste it into your browser.",
+          level: "info",
+        },
+      });
+    }
+  };
+
   private handleCloseSettings = (): void => {
     this.setState({ showPreferences: false });
   };
@@ -397,6 +410,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             activeTourTargetId={tourStep?.targetId}
             tourBubble={tourBubble}
             onOpenSettings={this.handleOpenSettings}
+            onReportBug={this.handleReportBug}
             onSerialPortChange={this.handleSerialPortChange}
             onSettingsChange={this.handleSettingsChange}
             onStretchChange={this.handleStretchChange}
@@ -466,6 +480,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
           }
         },
         onKnitFinished: () => {
+          this.knitStatusNotifier.set(0);
           this.setState({
             isKnitting: false,
             knitSession: undefined,
@@ -473,6 +488,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
           });
         },
         onKnitRuntimeError: () => {
+          this.knitStatusNotifier.set(0);
           this.setState({
             isKnitting: false,
             knitSession: undefined,

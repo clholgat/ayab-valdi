@@ -7,7 +7,6 @@ import {
   write as native_write,
   read as native_read,
   close_serial,
-  in_waiting as native_in_waiting,
   registerDataAvailableResolver,
   consumeReadBuffer,
 } from "serial/src/Serial";
@@ -25,6 +24,26 @@ const SLIP_ESC_ESC = 0xdd;
 export const READ_API6_TIMEOUT_MS = 5000;
 
 /**
+ * setTimeout/clearTimeout, preferring Valdi's original (unpatched) timing
+ * functions when available and bound to globalThis - matches the pattern used
+ * in StateMachine.ts/KnitSession.ts/HardwareTestSession.ts to avoid an
+ * "Illegal invocation" error from calling the global timer functions directly
+ * in this runtime.
+ */
+function getBoundTimingFunctions(): {
+  setTimeout: typeof setTimeout;
+  clearTimeout: typeof clearTimeout;
+} {
+  const originalTiming = (globalThis as any).__originalTimingFunctions__;
+  const setTimeoutFn = originalTiming?.setTimeout || setTimeout;
+  const clearTimeoutFn = originalTiming?.clearTimeout || clearTimeout;
+  return {
+    setTimeout: setTimeoutFn.bind(globalThis),
+    clearTimeout: clearTimeoutFn.bind(globalThis),
+  };
+}
+
+/**
  * Races `promise` against a timeout. If `promise` doesn't settle within
  * `timeoutMs`, calls `onTimeout` (for cleanup - e.g. unregistering a resolver)
  * and rejects. Whichever settles first "wins"; the loser is ignored.
@@ -34,9 +53,11 @@ export function withTimeout<T>(
   timeoutMs: number,
   onTimeout: () => void,
 ): Promise<T> {
+  const { setTimeout: boundSetTimeout, clearTimeout: boundClearTimeout } =
+    getBoundTimingFunctions();
   return new Promise<T>((resolve, reject) => {
     let settled = false;
-    const timer = setTimeout(() => {
+    const timer = boundSetTimeout(() => {
       if (settled) {
         return;
       }
@@ -51,7 +72,7 @@ export function withTimeout<T>(
           return;
         }
         settled = true;
-        clearTimeout(timer);
+        boundClearTimeout(timer);
         resolve(value);
       },
       (err) => {
@@ -59,7 +80,7 @@ export function withTimeout<T>(
           return;
         }
         settled = true;
-        clearTimeout(timer);
+        boundClearTimeout(timer);
         reject(err);
       },
     );
@@ -416,7 +437,9 @@ export class Communication implements ICommunication {
       // Bail out after READ_API6_TIMEOUT_MS instead of waiting forever: without
       // this, a device that stops responding mid-session leaves this promise -
       // and the caller awaiting it - hung permanently.
-      const timeoutId = setTimeout(function () {
+      const { setTimeout: boundSetTimeout, clearTimeout: boundClearTimeout } =
+        getBoundTimingFunctions();
+      const timeoutId = boundSetTimeout(function () {
         if (resolved) {
           return;
         }
@@ -445,7 +468,7 @@ export class Communication implements ICommunication {
 
         if (!is_open()) {
           resolved = true;
-          clearTimeout(timeoutId);
+          boundClearTimeout(timeoutId);
           if (removeResolver) {
             removeResolver();
           }
@@ -469,7 +492,7 @@ export class Communication implements ICommunication {
           // Return the oldest message if available
           if (self.rxMsgList.length > 0) {
             resolved = true;
-            clearTimeout(timeoutId);
+            boundClearTimeout(timeoutId);
             if (removeResolver) {
               removeResolver();
             }
@@ -495,13 +518,13 @@ export class Communication implements ICommunication {
             "read_API6_async: registerDataAvailableResolver not available",
           );
           resolved = true;
-          clearTimeout(timeoutId);
+          boundClearTimeout(timeoutId);
           resolve(null);
         }
       } catch (err: any) {
         console.error("read_API6_async: Error registering resolver:", err);
         resolved = true;
-        clearTimeout(timeoutId);
+        boundClearTimeout(timeoutId);
         resolve(null);
       }
     });
@@ -531,23 +554,16 @@ export class Communication implements ICommunication {
       return null;
     }
 
-    // If more bytes are available, read them all (matching Python's in_waiting check)
-    // This ensures we get all messages that arrived together
-    let bytesAvailable = native_in_waiting();
-    while (bytesAvailable > 0) {
-      const additionalData = this.read();
-      if (additionalData && additionalData.length > 0) {
-        // Combine the data
-        const combined = new Uint8Array(data.length + additionalData.length);
-        combined.set(data);
-        combined.set(additionalData, data.length);
-        data = combined;
-        // Check again if more bytes are available
-        bytesAvailable = native_in_waiting();
-      } else {
-        break;
-      }
-    }
+    // NOTE: this used to loop here calling this.read() again for as long as
+    // native_in_waiting() reported more bytes, to opportunistically batch
+    // multiple already-arrived messages into one call. On real hardware that
+    // reports available bytes in a rapid trickle of tiny chunks (observed:
+    // 1000+ reads of ~5 bytes each for a single burst), that loop ran fully
+    // synchronously with no yield back to the browser, freezing the tab for
+    // its entire duration. It's not needed for correctness: slipDecode/
+    // rxBuffer already reassemble frames split across multiple read_API6()
+    // calls (see slipDecodeChunk), so any bytes not caught by this single
+    // read() are simply picked up on the next ~100ms poll instead.
 
     // Decode SLIP frames - this may extract multiple messages
     const [frames, bytesConsumed] = this.slipDecode(data);

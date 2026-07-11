@@ -6,6 +6,7 @@
 import { isWebSocketUri } from "./SerialUri";
 import { WebsocketTransport } from "./WebsocketTransport";
 import { isSerialPortAlreadyOpenError } from "./SerialPortErrors";
+import { AsyncWriteQueue } from "./AsyncWriteQueue";
 
 // Web Serial API types (not available in all TypeScript versions)
 interface SerialPortOpenOptions {
@@ -48,6 +49,10 @@ let g_pendingReadResolvers: Array<() => void> = [];
 let g_wsTransport: WebsocketTransport | null = null;
 let g_usingWebsocket = false;
 let g_portClosePromise: Promise<void> | null = null;
+// Serializes writes to g_serialPort.writable so two rapid calls to write()
+// (no await between them - e.g. cnf_final_line_API6() immediately followed
+// by reqInfo() at the end of a knit) never race for the writer lock.
+let g_writeQueue = new AsyncWriteQueue();
 
 function scheduleTimeout(ms: number): Promise<void> {
   return new Promise(function (resolve) {
@@ -551,16 +556,23 @@ export function write(data: Uint8Array): void {
     return;
   }
 
-  const writer = g_serialPort.writable.getWriter();
-  writer
-    .write(data)
-    .then(function () {
-      writer.releaseLock();
-    })
-    .catch(function (err: any) {
+  // Queued (not fired immediately): getWriter() throws if a previous write's
+  // writer hasn't released its lock yet, which happens whenever write() is
+  // called twice back to back with no await in between.
+  g_writeQueue.enqueue(async () => {
+    if (!g_serialPort || !g_isOpen || !g_serialPort.writable) {
+      // Port may have closed while this write was queued.
+      return;
+    }
+    const writer = g_serialPort.writable.getWriter();
+    try {
+      await writer.write(data);
+    } catch (err: unknown) {
       console.error("SerialWeb.write: Error writing to serial port:", err);
+    } finally {
       writer.releaseLock();
-    });
+    }
+  });
 }
 
 export function read(): Uint8Array {

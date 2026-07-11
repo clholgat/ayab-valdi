@@ -48,4 +48,10 @@ describe("AboutScreen", () => {
     await tapNodeWithKey(root, "about-close");
     expect(onClose).toHaveBeenCalled();
   });
+
+  valdiIt("has a Report a bug button that can be tapped without throwing", async (driver) => {
+    const root = renderAboutScreen(driver, makeViewModel());
+    expect(findNodeWithKey(root, "about-report-bug")[0]).toBeDefined();
+    await tapNodeWithKey(root, "about-report-bug");
+  });
 });
