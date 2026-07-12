@@ -114,3 +114,11 @@ try {
   }
   stopDevServer(serverChild);
 }
+
+// All specs have already been graded via process.exitCode above; force-exit
+// rather than letting Node wait on the event loop, since an orphaned
+// grandchild process or lingering Puppeteer/Chrome handle can otherwise keep
+// this script (and the CI job) alive indefinitely after everything we
+// actually care about has finished. Observed in CI: all specs passed but the
+// job ran for 5+ hours until GitHub's 6h cap force-canceled it.
+process.exit(process.exitCode ?? 0);

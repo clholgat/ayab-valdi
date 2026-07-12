@@ -37,6 +37,12 @@ export async function startDevServer(port = DEFAULT_PORT) {
     cwd: new URL("../..", import.meta.url).pathname,
     env: { ...process.env, PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"],
+    // npm doesn't forward signals to the webpack-dev-server process it
+    // spawns as its own child, so a plain SIGTERM to `child` can leave that
+    // grandchild running as an orphan - which keeps Node's event loop (and
+    // the CI job) alive indefinitely even after all specs finish. Run it in
+    // its own process group so stopDevServer() can signal the whole tree.
+    detached: true,
   });
 
   child.stdout?.on("data", (chunk) => {
@@ -55,7 +61,14 @@ export async function startDevServer(port = DEFAULT_PORT) {
 }
 
 export function stopDevServer(child) {
-  if (child && !child.killed) {
-    child.kill("SIGTERM");
+  if (child && !child.killed && child.pid) {
+    try {
+      // Negative pid targets the whole process group (see the `detached`
+      // comment above) so npm's actual webpack-dev-server grandchild is
+      // signaled too, not just the npm wrapper process.
+      process.kill(-child.pid, "SIGTERM");
+    } catch {
+      // Group or process may have already exited.
+    }
   }
 }
