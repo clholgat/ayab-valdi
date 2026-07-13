@@ -26,6 +26,8 @@ export interface AppSidebarViewModel {
   repeatV: number;
   stretchH: number;
   stretchV: number;
+  /** RGB palette (0xRRGGBB per color index) for the currently loaded pattern. */
+  palette?: number[];
   knitDisabled: boolean;
   knitDisabledReason: string | null;
   isKnitting: boolean;
@@ -100,6 +102,7 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
             repeatV={vm.repeatV}
             stretchH={vm.stretchH}
             stretchV={vm.stretchV}
+            palette={vm.palette}
             tourHighlighted={tourHighlightActive(target, "checklist-target-needles")}
             onSettingsChange={vm.onSettingsChange}
             onStretchChange={vm.onStretchChange}

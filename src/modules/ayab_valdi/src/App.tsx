@@ -28,6 +28,7 @@ import {
 import { PlatformAudioFeedback } from "./PlatformAudioFeedback";
 import { AppSidebar } from "./AppSidebar";
 import { reportBug } from "app_settings/src/BugReport";
+import { computePreviewPalette } from "./PreviewPalette";
 import { createAppImageHandlers } from "./AppImageHandlers";
 import { ActiveTourBubble } from "./InlineTourBubble";
 import {
@@ -50,7 +51,16 @@ import {
  * @ViewModel
  * @ExportModel
  */
-export interface AppViewModel {}
+export interface AppViewModel {
+  /**
+   * Lets an external caller (e.g. a pattern-generator tool) inject a
+   * pre-loaded image, bypassing the file picker. Only applied when
+   * `initialImageRevision` increases, mirroring Preview's
+   * `syncedBits`/`imageBitsRevision` mechanism.
+   */
+  initialImageBits?: Uint8Array[][];
+  initialImageRevision?: number;
+}
 
 /**
  * @Context
@@ -107,6 +117,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     imageBitsRevision: this.state.imageBitsRevision,
   }));
   private unsubscribePreferences?: () => void;
+  private paletteCache: { key: string; palette: number[] } | null = null;
 
   state: State = {
     preferences: new Preferences(),
@@ -161,6 +172,21 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     this.unsubscribePreferences?.();
     this.state.knitSession?.cancel();
     this.state.hwTestSession?.cancel();
+  }
+
+  onViewModelUpdate(previous?: AppViewModel): void {
+    const revision = this.viewModel.initialImageRevision;
+    if (
+      revision == null ||
+      revision === previous?.initialImageRevision ||
+      this.viewModel.initialImageBits == null
+    ) {
+      return;
+    }
+    const bits = this.viewModel.initialImageBits;
+    const height = bits.length;
+    const width = height > 0 ? bits[0]!.length : 0;
+    this.handleBitsLoaded(bits, width, height);
   }
 
   private handleBitsLoaded = (
@@ -224,6 +250,44 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   private handleSettingsChange = (settings: ImageSettings): void => {
     this.setState({ currentImageSettings: settings });
   };
+
+  /**
+   * RGB palette for the currently loaded pattern, memoized by the inputs
+   * that actually affect it - recomputing this full quantization pass on
+   * every unrelated render (e.g. a userMessage text change) would be wasted
+   * work.
+   */
+  private getPreviewPalette(machineWidth: number): number[] {
+    const { imageBits, imageWidth, imageHeight, imageBitsRevision, currentImageSettings, sourceImageBits } =
+      this.state;
+    if (!sourceImageBits || !imageBits || !imageWidth || !imageHeight || !currentImageSettings) {
+      this.paletteCache = null;
+      return [];
+    }
+    const key = [
+      imageBitsRevision,
+      currentImageSettings.numColors,
+      currentImageSettings.mode,
+      machineWidth,
+      currentImageSettings.startNeedle,
+      currentImageSettings.stopNeedle,
+    ].join(":");
+    if (this.paletteCache && this.paletteCache.key === key) {
+      return this.paletteCache.palette;
+    }
+    const palette = computePreviewPalette({
+      imageBits,
+      imageWidth,
+      imageHeight,
+      numColors: currentImageSettings.numColors,
+      mode: currentImageSettings.mode,
+      machineWidth,
+      startNeedle: currentImageSettings.startNeedle,
+      stopNeedle: currentImageSettings.stopNeedle,
+    });
+    this.paletteCache = { key, palette };
+    return palette;
+  }
 
   private handleKnit = (): void => {
     void this.startKnit();
@@ -333,6 +397,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       this.state.isKnitting && session?.control.machine != null
         ? session.control.machine
         : this.state.preferences.machine;
+    const previewPalette = this.getPreviewPalette(Machine.width(machine));
     const knitDisabled = isKnitButtonDisabled({
       isKnitting: this.state.isKnitting,
       isHardwareTesting: this.state.isHardwareTesting,
@@ -402,6 +467,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             repeatV={this.state.repeatV}
             stretchH={this.state.stretchH}
             stretchV={this.state.stretchV}
+            palette={previewPalette}
             knitDisabled={knitDisabled}
             knitDisabledReason={knitDisabledReason}
             isKnitting={this.state.isKnitting}

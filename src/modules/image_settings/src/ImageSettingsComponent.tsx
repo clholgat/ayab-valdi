@@ -1,8 +1,9 @@
 import { StatefulComponent } from "valdi_core/src/Component";
-import { EditTextEvent, Label, Layout } from "valdi_tsx/src/NativeTemplateElements";
+import { EditTextEvent, Label, Layout, View } from "valdi_tsx/src/NativeTemplateElements";
 import { Style } from "valdi_core/src/Style";
 import { sansFont } from "constants/src/Typography";
 import { parseRepeatCount } from "preview/src/ImageTransform";
+import { rgbIntToHex } from "preview/src/FormattedDisplayLogic";
 import {
   buildImageSettings,
   buildNeedleRangeSuggestion,
@@ -57,6 +58,8 @@ export interface ImageSettingsViewModel {
   repeatV?: number;
   stretchH?: number;
   stretchV?: number;
+  /** RGB palette (0xRRGGBB per color index) for the currently loaded pattern. */
+  palette?: number[];
   onSettingsChange?: (settings: ImageSettings) => void;
   onStretchChange?: (stretchH: number, stretchV: number) => void;
   onRepeatChange?: (repeatH: number, repeatV: number) => void;
@@ -566,6 +569,24 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           decrementId="colors-decrement"
           incrementId="colors-increment"
         />
+        <layout key="color-legend" style={styles.colorLegend}>
+          {(this.viewModel.palette ?? []).map((color, index) => (
+            <layout key={`color-legend-row-${index}`} style={styles.colorLegendRow}>
+              <view
+                key={`color-legend-swatch-${index}`}
+                accessibilityId={`color-legend-swatch-${index}`}
+                style={styles.colorLegendSwatch}
+                backgroundColor={rgbIntToHex(color)}
+              />
+              <label
+                key={`color-legend-label-${index}`}
+                accessibilityId={`color-legend-label-${index}`}
+                style={styles.colorLegendLabel}
+                value={`Color ${index + 1}`}
+              />
+            </layout>
+          ))}
+        </layout>
         <IntegerStepperField
           label="Start row"
           value={this.state.startRowText}
@@ -711,6 +732,28 @@ export const ImageSettingsComponent = withProviders(PreferencesProvider)(
 );
 
 const styles = {
+  colorLegend: new Style<Layout>({
+    flexDirection: "column",
+    marginBottom: 8,
+  }),
+  colorLegendRow: new Style<Layout>({
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  }),
+  colorLegendSwatch: new Style<View>({
+    width: 16,
+    height: 16,
+    borderRadius: 2,
+    marginRight: 8,
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+  }),
+  colorLegendLabel: new Style<Label>({
+    font: sansFont(13),
+    color: TEXT_SECONDARY,
+  }),
   needleSuggestion: new Style<Label>({
     font: sansFont(13),
     color: TEXT_SECONDARY,
