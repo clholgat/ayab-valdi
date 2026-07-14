@@ -16,6 +16,12 @@ import { tourHighlightActive } from "./FirstRunTour";
 import { ActiveTourBubble, InlineTourBubble } from "./InlineTourBubble";
 
 export interface AppSidebarViewModel {
+  /**
+   * When false, hides the machine-connection UI (serial-port picker and knit
+   * footer) so the sidebar serves pattern prep/preview only — e.g. the
+   * Android app, where knitting stays desktop-driven. Defaults to true.
+   */
+  enableMachineIo?: boolean;
   sessionLocked: boolean;
   machineRevision: number;
   imageWidth?: number;
@@ -52,6 +58,7 @@ export interface AppSidebarViewModel {
 export class AppSidebar extends Component<AppSidebarViewModel> {
   onRender(): void {
     const vm = this.viewModel;
+    const machineIo = vm.enableMachineIo !== false;
     const target = vm.activeTourTargetId;
     const showActionBanner = shouldShowKnitActionBanner(
       vm.isKnitting,
@@ -84,14 +91,7 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
               width="100%"
             />
           </layout>
-          <SerialPortPicker
-            tourHighlighted={tourHighlightActive(target, "checklist-target-connection")}
-            onChange={vm.onSerialPortChange}
-          />
-          <InlineTourBubble
-            targetId="checklist-target-connection"
-            bubble={vm.tourBubble}
-          />
+          {this.renderSerialPicker(machineIo)}
           <ImageSettingsComponent
             machineRevision={vm.machineRevision}
             imageWidth={vm.imageWidth}
@@ -118,30 +118,56 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
           />
         </layout>
       </scroll>
-      <InlineTourBubble targetId="checklist-target-knit" bubble={vm.tourBubble} />
-      <AppKnitFooter
-        isKnitting={vm.isKnitting}
-        knitDisabled={vm.knitDisabled}
-        knitDisabledReason={vm.knitDisabledReason}
-        userMessageText={
-          showActionBanner ? undefined : vm.userMessageText
-        }
-        userMessageLevel={
-          showActionBanner ? undefined : vm.userMessageLevel
-        }
-        tourHighlighted={tourHighlightActive(target, "checklist-target-knit")}
-        onKnit={vm.onKnit}
-        onCancel={vm.onCancel}
-      />
+      {this.renderKnitFooter(machineIo, showActionBanner)}
     </layout>;
+  }
+
+  private renderSerialPicker(machineIo: boolean): void {
+    if (!machineIo) {
+      return;
+    }
+    const vm = this.viewModel;
+    <SerialPortPicker
+      tourHighlighted={tourHighlightActive(vm.activeTourTargetId, "checklist-target-connection")}
+      onChange={vm.onSerialPortChange}
+    />;
+    <InlineTourBubble
+      targetId="checklist-target-connection"
+      bubble={vm.tourBubble}
+    />;
+  }
+
+  private renderKnitFooter(machineIo: boolean, showActionBanner: boolean): void {
+    if (!machineIo) {
+      return;
+    }
+    const vm = this.viewModel;
+    <InlineTourBubble targetId="checklist-target-knit" bubble={vm.tourBubble} />;
+    <AppKnitFooter
+      isKnitting={vm.isKnitting}
+      knitDisabled={vm.knitDisabled}
+      knitDisabledReason={vm.knitDisabledReason}
+      userMessageText={
+        showActionBanner ? undefined : vm.userMessageText
+      }
+      userMessageLevel={
+        showActionBanner ? undefined : vm.userMessageLevel
+      }
+      tourHighlighted={tourHighlightActive(vm.activeTourTargetId, "checklist-target-knit")}
+      onKnit={vm.onKnit}
+      onCancel={vm.onCancel}
+    />;
   }
 }
 
 const styles = {
+  // flexShrink 1 + minWidth 0: full 408 on desktop (no shrink pressure), but
+  // compresses on narrow viewports (Android phones) instead of overflowing.
   rightPanel: new Style<Layout>({
     width: 408,
-    flexShrink: 0,
+    flexShrink: 1,
     flexGrow: 0,
+    minWidth: 0,
     height: "100%",
     minHeight: 0,
     flexDirection: "column",

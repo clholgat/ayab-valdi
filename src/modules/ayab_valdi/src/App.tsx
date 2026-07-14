@@ -60,6 +60,12 @@ export interface AppViewModel {
    */
   initialImageBits?: Uint8Array[][];
   initialImageRevision?: number;
+  /**
+   * When false, hides machine-connection UI (serial-port picker, knit
+   * footer) so the app serves pattern prep/preview only — e.g. on Android,
+   * where knitting stays desktop-driven. Defaults to true.
+   */
+  enableMachineIo?: boolean;
 }
 
 /**
@@ -457,6 +463,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             />
           </layout>
           <AppSidebar
+            enableMachineIo={this.viewModel.enableMachineIo}
             sessionLocked={this.state.isKnitting || this.state.isHardwareTesting}
             machineRevision={this.state.machineRevision}
             imageWidth={this.state.imageWidth}

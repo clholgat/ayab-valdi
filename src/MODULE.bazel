@@ -94,9 +94,12 @@ maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
     name = "serial_mvn",
     artifacts = [
-        "com.hoho.android.usbserial:usb-serial-for-android:3.7.0",
+        # Distributed via JitPack, not Maven Central (the library's own
+        # com.hoho.android.usbserial package name is not its Maven group).
+        "com.github.mik3y:usb-serial-for-android:3.7.0",
     ],
     repositories = [
+        "https://jitpack.io",
         "https://repo1.maven.org/maven2",
         "https://maven.google.com",
     ],
@@ -104,6 +107,10 @@ maven.install(
     version_conflict_policy = "pinned",
 )
 use_repo(maven, "serial_mvn")
+
+# Android builds: module BUILD files reference @android_mvn (Valdi's
+# maven.install), which must be mapped into this repo's namespace.
+use_repo(maven, "android_mvn")
 
 bazel_dep(name = "aspect_rules_ts", version = "3.7.0")
 rules_ts_ext = use_extension("@aspect_rules_ts//ts:extensions.bzl", "ext")

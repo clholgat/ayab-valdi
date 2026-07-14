@@ -11,6 +11,8 @@ import com.snapchat.client.valdi_core.ModuleFactory
 import com.snap.valdi.modules.RegisterValdiModule
 import com.snap.modules.serial.SerialModuleFactory
 import com.snap.modules.serial.SerialModule
+import com.snap.valdi.promise.Promise
+import com.snap.valdi.promise.ResolvedPromise
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
@@ -206,12 +208,11 @@ class SerialModuleImpl: SerialModule {
             
             try {
                 usbPort?.write(data, 0)
+            } catch (e: IOException) {
+                // If write fails, connection might be broken
+                isOpen.set(false)
             } catch (e: Exception) {
                 // Log error
-                // If write fails, connection might be broken
-                if (e is IOException) {
-                    isOpen.set(false)
-                }
             }
         }
     }
@@ -248,20 +249,49 @@ class SerialModuleImpl: SerialModule {
         return isOpen.get() && usbPort != null
     }
 
-    override fun in_waiting(): Int {
+    override fun get_serial_ports(): List<String> {
+        // Machine I/O is desktop-driven in v1; the Android app is prep/preview
+        // only, so no ports are surfaced until USB-host support lands.
+        return emptyList()
+    }
+
+    override fun consumeReadBuffer(bytesToConsume: Double) {
+        bufferLock.withLock {
+            var remaining = bytesToConsume.toInt()
+            while (remaining > 0 && readBuffer.isNotEmpty()) {
+                readBuffer.poll()
+                remaining--
+            }
+        }
+    }
+
+    override fun request_serial_port(): Promise<String?> {
+        return ResolvedPromise(null)
+    }
+
+    override fun refresh_serial_ports(): Promise<List<String>> {
+        return ResolvedPromise(emptyList())
+    }
+
+    override fun browse_ayab_mdns(): List<Map<String, Any?>> {
+        return emptyList()
+    }
+
+    override fun registerDataAvailableResolver(resolver: () -> Unit): () -> Unit {
+        // No async read notifications in the v1 prep-only build.
+        return {}
+    }
+
+    override fun in_waiting(): Double {
         synchronized(this) {
             if (!isOpen.get() || usbPort == null) {
-                return 0
+                return 0.0
             }
-            
-            // Return bytes available in buffer + bytes available in USB port
+
+            // usb-serial-for-android has no bytes-available query; the read
+            // thread drains the port into readBuffer, so its size is the count.
             val bufferSize = bufferLock.withLock { readBuffer.size }
-            val portAvailable = try {
-                usbPort?.bytesAvailable ?: 0
-            } catch (e: Exception) {
-                0
-            }
-            return bufferSize + portAvailable
+            return bufferSize.toDouble()
         }
     }
 

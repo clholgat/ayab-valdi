@@ -8,7 +8,7 @@ valdi_android_library(
     ]),
     deps = [
         ":serial_api_kt",
-        "@serial_mvn//:com_hoho_android_usbserial_usb_serial_for_android",
+        "@serial_mvn//:com_github_mik3y_usb_serial_for_android",
     ],
 )
 
