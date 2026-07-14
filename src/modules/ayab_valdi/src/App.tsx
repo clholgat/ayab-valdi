@@ -1,5 +1,6 @@
 import { StatefulComponent } from "valdi_core/src/Component";
-import { View, Layout } from "valdi_tsx/src/NativeTemplateElements";
+import { View, Layout, Label } from "valdi_tsx/src/NativeTemplateElements";
+import { ElementFrame } from "valdi_tsx/src/Geometry";
 import { Style } from "valdi_core/src/Style";
 import { Device } from "valdi_core/src/Device";
 import {
@@ -12,6 +13,7 @@ import { KnitSession } from "./KnitSession";
 import { HardwareTestSession } from "./HardwareTestSession";
 import { Token } from "constants/src/SerialConstants";
 import { FeedbackMessage } from "./Feedback";
+import { shouldShowKnitActionBanner } from "./KnitSessionUiLogic";
 import { SettingsModal } from "./SettingsModal";
 import { HardwareTestModal } from "./HardwareTestModal";
 import {
@@ -19,6 +21,7 @@ import {
   isKnitButtonDisabled,
 } from "./AppUiState";
 import { APP_BACKGROUND } from "constants/src/UiTheme";
+import { BUTTON_FONT_SMALL } from "constants/src/Typography";
 import { PreviewPanel } from "./PreviewPanel";
 import { ValueNotifier } from "./ValueNotifier";
 import {
@@ -30,12 +33,20 @@ import { AppSidebar } from "./AppSidebar";
 import { reportBug } from "app_settings/src/BugReport";
 import { computePreviewPalette } from "./PreviewPalette";
 import { createAppImageHandlers } from "./AppImageHandlers";
-import { ActiveTourBubble } from "./InlineTourBubble";
+import { ActiveTourBubble, InlineTourBubble } from "./InlineTourBubble";
+import { AppKnitFooter } from "./AppKnitFooter";
+import {
+  CoreButton,
+  CoreButtonColoring,
+  CoreButtonSizing,
+} from "widgets/src/components/button/CoreButton";
 import {
   FIRST_RUN_TOUR_STEP_COUNT,
+  FirstRunTourStep,
   getFirstRunTourStep,
   nextTourStepIndex,
   previousTourStepIndex,
+  tourHighlightActive,
 } from "./FirstRunTour";
 import {
   closeAppHardwareTest,
@@ -100,6 +111,9 @@ interface State {
   isHardwareTesting: boolean;
   hwTestSession?: HardwareTestSession;
   firstRunTourStep: number | null;
+  /** Narrow-viewport mode: the sidebar moves into a slide-over drawer. */
+  compactLayout: boolean;
+  sidebarDrawerOpen: boolean;
 }
 
 /**
@@ -138,6 +152,8 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     showPreferences: false,
     isHardwareTesting: false,
     firstRunTourStep: null,
+    compactLayout: false,
+    sidebarDrawerOpen: false,
   };
 
   onCreate(): void {
@@ -397,6 +413,150 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     });
   };
 
+  private handleRootLayout = (frame: ElementFrame): void => {
+    const compact = frame.width > 0 && frame.width <= COMPACT_LAYOUT_MAX_WIDTH;
+    if (compact !== this.state.compactLayout) {
+      this.setState({ compactLayout: compact, sidebarDrawerOpen: false });
+    }
+  };
+
+  private handleOpenSidebarDrawer = (): void => {
+    this.setState({ sidebarDrawerOpen: true });
+  };
+
+  private handleCloseSidebarDrawer = (): void => {
+    this.setState({ sidebarDrawerOpen: false });
+  };
+
+  private renderAppSidebar(
+    previewPalette: number[] | undefined,
+    knitDisabled: boolean,
+    knitDisabledReason: string | null,
+    tourStep: FirstRunTourStep | undefined,
+    tourBubble: ActiveTourBubble | null,
+    inDrawer: boolean,
+  ): void {
+    <AppSidebar
+      enableMachineIo={this.viewModel.enableMachineIo}
+      fillWidth={inDrawer}
+      omitKnitFooter={inDrawer}
+      onClose={inDrawer ? this.handleCloseSidebarDrawer : undefined}
+      sessionLocked={this.state.isKnitting || this.state.isHardwareTesting}
+      machineRevision={this.state.machineRevision}
+      imageWidth={this.state.imageWidth}
+      imageHeight={this.state.imageHeight}
+      imageBitsRevision={this.state.imageBitsRevision}
+      hasImage={this.state.sourceImageBits != null}
+      repeatH={this.state.repeatH}
+      repeatV={this.state.repeatV}
+      stretchH={this.state.stretchH}
+      stretchV={this.state.stretchV}
+      palette={previewPalette}
+      knitDisabled={knitDisabled}
+      knitDisabledReason={knitDisabledReason}
+      isKnitting={this.state.isKnitting}
+      userMessageText={this.state.userMessage?.text}
+      userMessageLevel={this.state.userMessage?.level}
+      activeTourTargetId={tourStep?.targetId}
+      tourBubble={tourBubble}
+      onOpenSettings={this.handleOpenSettings}
+      onReportBug={this.handleReportBug}
+      onSerialPortChange={this.handleSerialPortChange}
+      onSettingsChange={this.handleSettingsChange}
+      onStretchChange={this.handleStretchChange}
+      onRepeatChange={this.handleRepeatChange}
+      onFlipH={this.handleFlipH}
+      onFlipV={this.handleFlipV}
+      onRotate={this.handleRotateLeft}
+      onInvert={this.handleInvert}
+      onKnit={this.handleKnit}
+      onCancel={this.handleCancel}
+    />;
+  }
+
+  private renderInlineSidebar(
+    previewPalette: number[] | undefined,
+    knitDisabled: boolean,
+    knitDisabledReason: string | null,
+    tourStep: FirstRunTourStep | undefined,
+    tourBubble: ActiveTourBubble | null,
+  ): void {
+    if (this.state.compactLayout) {
+      return;
+    }
+    this.renderAppSidebar(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble, false);
+  }
+
+  /**
+   * Compact mode: a fixed bottom action bar keeps the primary action (Knit /
+   * Cancel + status) always visible — matching the desktop's pinned footer —
+   * next to a Controls button that opens the settings drawer.
+   */
+  private renderCompactSidebarControls(
+    previewPalette: number[] | undefined,
+    knitDisabled: boolean,
+    knitDisabledReason: string | null,
+    tourStep: FirstRunTourStep | undefined,
+    tourBubble: ActiveTourBubble | null,
+  ): void {
+    if (!this.state.compactLayout) {
+      return;
+    }
+    <layout key="compact-bottom-bar" style={styles.compactBottomBar}>
+      <layout style={styles.compactControlsWrap}>
+        <CoreButton
+          accessibilityId="sidebar-drawer-toggle"
+          key="sidebar-drawer-toggle"
+          text="Controls"
+          onTap={this.handleOpenSidebarDrawer}
+          coloring={CoreButtonColoring.SECONDARY}
+          sizing={CoreButtonSizing.SMALL}
+          font={BUTTON_FONT_SMALL}
+          width="100%"
+        />
+      </layout>
+      {this.renderCompactKnitFooter(knitDisabled, knitDisabledReason, tourStep, tourBubble)}
+    </layout>;
+    if (!this.state.sidebarDrawerOpen) {
+      return;
+    }
+    <view key="sidebar-drawer-scrim" style={styles.drawerScrim} onTap={this.handleCloseSidebarDrawer} />;
+    <view key="sidebar-drawer" style={styles.drawer}>
+      {this.renderAppSidebar(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble, true)}
+    </view>;
+  }
+
+  private renderCompactKnitFooter(
+    knitDisabled: boolean,
+    knitDisabledReason: string | null,
+    tourStep: FirstRunTourStep | undefined,
+    tourBubble: ActiveTourBubble | null,
+  ): void {
+    if (this.viewModel.enableMachineIo === false) {
+      return;
+    }
+    // The prominent action banner at the top already shows the live knit
+    // message; suppress the footer's copy while it does (same gating as the
+    // desktop sidebar).
+    const showActionBanner = shouldShowKnitActionBanner(
+      this.state.isKnitting,
+      this.state.userMessage?.text,
+    );
+    <layout style={styles.compactKnitWrap}>
+      <AppKnitFooter
+        isKnitting={this.state.isKnitting}
+        knitDisabled={knitDisabled}
+        knitDisabledReason={knitDisabledReason}
+        userMessageText={showActionBanner ? undefined : this.state.userMessage?.text}
+        userMessageLevel={showActionBanner ? undefined : this.state.userMessage?.level}
+        tourHighlighted={tourHighlightActive(tourStep?.targetId, "checklist-target-knit")}
+        onKnit={this.handleKnit}
+        onCancel={this.handleCancel}
+      />
+      <InlineTourBubble targetId="checklist-target-knit" bubble={tourBubble} />
+    </layout>;
+  }
+
   onRender(): void {
     const session = this.state.knitSession;
     const machine =
@@ -436,10 +596,10 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
           }
         : null;
 
-    <view accessibilityId="app-root" style={styles.main}>
+    <view key="app-root" accessibilityId="app-root" style={styles.main} onLayout={this.handleRootLayout}>
       <PreferencesProvider value={this.state.preferences}>
         <layout style={styles.contentLayout}>
-          <layout style={styles.leftPanel}>
+          <layout style={this.state.compactLayout ? styles.leftPanelCompact : styles.leftPanel}>
             <PreviewPanel
               title="Pattern"
               machineWidth={Machine.width(machine)}
@@ -462,40 +622,9 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
               tourBubble={tourBubble}
             />
           </layout>
-          <AppSidebar
-            enableMachineIo={this.viewModel.enableMachineIo}
-            sessionLocked={this.state.isKnitting || this.state.isHardwareTesting}
-            machineRevision={this.state.machineRevision}
-            imageWidth={this.state.imageWidth}
-            imageHeight={this.state.imageHeight}
-            imageBitsRevision={this.state.imageBitsRevision}
-            hasImage={this.state.sourceImageBits != null}
-            repeatH={this.state.repeatH}
-            repeatV={this.state.repeatV}
-            stretchH={this.state.stretchH}
-            stretchV={this.state.stretchV}
-            palette={previewPalette}
-            knitDisabled={knitDisabled}
-            knitDisabledReason={knitDisabledReason}
-            isKnitting={this.state.isKnitting}
-            userMessageText={this.state.userMessage?.text}
-            userMessageLevel={this.state.userMessage?.level}
-            activeTourTargetId={tourStep?.targetId}
-            tourBubble={tourBubble}
-            onOpenSettings={this.handleOpenSettings}
-            onReportBug={this.handleReportBug}
-            onSerialPortChange={this.handleSerialPortChange}
-            onSettingsChange={this.handleSettingsChange}
-            onStretchChange={this.handleStretchChange}
-            onRepeatChange={this.handleRepeatChange}
-            onFlipH={this.handleFlipH}
-            onFlipV={this.handleFlipV}
-            onRotate={this.handleRotateLeft}
-            onInvert={this.handleInvert}
-            onKnit={this.handleKnit}
-            onCancel={this.handleCancel}
-          />
+          {this.renderInlineSidebar(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble)}
         </layout>
+        {this.renderCompactSidebarControls(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble)}
         {this.state.showPreferences ? (
           <SettingsModal
             onClose={this.handleCloseSettings}
@@ -623,6 +752,9 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   };
 }
 
+/** Below this root width the sidebar moves into the slide-over drawer. */
+const COMPACT_LAYOUT_MAX_WIDTH = 760;
+
 const styles = {
   main: new Style<View>({
     backgroundColor: APP_BACKGROUND,
@@ -655,5 +787,57 @@ const styles = {
     flexDirection: "column",
     alignItems: "stretch",
     alignSelf: "stretch",
+  }),
+  // Compact mode: the preview owns the full width (no sidebar gutter, and no
+  // minWidth so a 320px viewport can't overflow).
+  leftPanelCompact: new Style<Layout>({
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    minHeight: 0,
+    height: "100%",
+    flexDirection: "column",
+    alignItems: "stretch",
+    alignSelf: "stretch",
+  }),
+  // Controls stacked above the knit footer: both span the full width, so the
+  // footer's status message and Knit/Cancel center on the page.
+  compactBottomBar: new Style<Layout>({
+    flexDirection: "column",
+    flexShrink: 0,
+    width: "100%",
+    paddingTop: 8,
+  }),
+  compactControlsWrap: new Style<Layout>({
+    width: "100%",
+    flexShrink: 0,
+    marginBottom: 8,
+  }),
+  compactKnitWrap: new Style<Layout>({
+    width: "100%",
+    flexShrink: 0,
+    flexDirection: "column",
+  }),
+  drawerScrim: new Style<View>({
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  }),
+  // Full width up to the standard sidebar width: phone-sized viewports get the
+  // whole screen (image-settings rows need ~390px); the scrim only peeks
+  // through on mid-sized ones.
+  drawer: new Style<View>({
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: "100%",
+    maxWidth: 408,
+    backgroundColor: APP_BACKGROUND,
+    padding: 12,
+    boxShadow: "-2 0 12 rgba(0, 0, 0, 0.3)",
   }),
 };

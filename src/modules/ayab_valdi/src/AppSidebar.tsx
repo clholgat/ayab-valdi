@@ -1,6 +1,6 @@
 import { Component } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
-import { Layout, ScrollView } from "valdi_tsx/src/NativeTemplateElements";
+import { Label, Layout, ScrollView, View } from "valdi_tsx/src/NativeTemplateElements";
 import { ImageSettings, ImageSettingsComponent } from "image_settings/src/ImageSettingsComponent";
 import { BUTTON_FONT_SMALL } from "constants/src/Typography";
 import {
@@ -22,6 +22,12 @@ export interface AppSidebarViewModel {
    * Android app, where knitting stays desktop-driven. Defaults to true.
    */
   enableMachineIo?: boolean;
+  /** Fill the parent instead of the fixed 408px column (drawer hosting). */
+  fillWidth?: boolean;
+  /** When provided, renders a close row at the top (drawer hosting). */
+  onClose?: () => void;
+  /** Drawer hosting: the knit footer lives in the compact bottom bar instead. */
+  omitKnitFooter?: boolean;
   sessionLocked: boolean;
   machineRevision: number;
   imageWidth?: number;
@@ -65,7 +71,8 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
       vm.userMessageText,
     );
 
-    <layout style={styles.rightPanel}>
+    <layout style={vm.fillWidth ? styles.rightPanelFill : styles.rightPanel}>
+      {this.renderCloseRow()}
       <scroll style={styles.sidebarScroll}>
         <layout style={styles.sidebarScrollInner}>
           <layout style={styles.settingsButtonRow}>
@@ -122,6 +129,25 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
     </layout>;
   }
 
+  private renderCloseRow(): void {
+    const onClose = this.viewModel.onClose;
+    if (!onClose) {
+      return;
+    }
+    <layout style={styles.closeRow}>
+      <label style={styles.closeTitle} value="Controls" />
+      <view
+        key="sidebar-drawer-close"
+        accessibilityId="sidebar-drawer-close"
+        style={styles.closeButton}
+        touchAreaExtension={8}
+        onTap={onClose}
+      >
+        <label style={styles.closeGlyph} value="✕" />
+      </view>
+    </layout>;
+  }
+
   private renderSerialPicker(machineIo: boolean): void {
     if (!machineIo) {
       return;
@@ -138,7 +164,7 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
   }
 
   private renderKnitFooter(machineIo: boolean, showActionBanner: boolean): void {
-    if (!machineIo) {
+    if (!machineIo || this.viewModel.omitKnitFooter) {
       return;
     }
     const vm = this.viewModel;
@@ -161,17 +187,50 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
 }
 
 const styles = {
-  // flexShrink 1 + minWidth 0: full 408 on desktop (no shrink pressure), but
-  // compresses on narrow viewports (Android phones) instead of overflowing.
+  // Fixed 408 column: narrow viewports switch to the drawer (App compact
+  // mode) instead of squeezing this inline.
   rightPanel: new Style<Layout>({
     width: 408,
-    flexShrink: 1,
+    flexShrink: 0,
     flexGrow: 0,
+    height: "100%",
+    minHeight: 0,
+    flexDirection: "column",
+    alignSelf: "stretch",
+  }),
+  // Drawer hosting: the drawer container owns the width.
+  rightPanelFill: new Style<Layout>({
+    width: "100%",
+    flexShrink: 1,
+    flexGrow: 1,
     minWidth: 0,
     height: "100%",
     minHeight: 0,
     flexDirection: "column",
     alignSelf: "stretch",
+  }),
+  closeRow: new Style<Layout>({
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexShrink: 0,
+    paddingBottom: 8,
+  }),
+  closeTitle: new Style<Label>({
+    font: BUTTON_FONT_SMALL,
+    color: "#0F172A",
+  }),
+  closeButton: new Style<View>({
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#E2E8F0",
+    justifyContent: "center",
+    alignItems: "center",
+  }),
+  closeGlyph: new Style<Label>({
+    font: BUTTON_FONT_SMALL,
+    color: "#0F172A",
   }),
   sidebarScroll: new Style<ScrollView>({
     width: "100%",
