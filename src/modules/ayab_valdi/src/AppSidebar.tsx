@@ -40,6 +40,8 @@ export interface AppSidebarViewModel {
   stretchV: number;
   /** RGB palette (0xRRGGBB per color index) for the currently loaded pattern. */
   palette?: number[];
+  /** Live settings for hydrating a freshly mounted panel (drawer reopen). */
+  currentImageSettings?: ImageSettings;
   knitDisabled: boolean;
   knitDisabledReason: string | null;
   isKnitting: boolean;
@@ -100,6 +102,7 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
           </layout>
           {this.renderSerialPicker(machineIo)}
           <ImageSettingsComponent
+            initialSettings={vm.currentImageSettings}
             machineRevision={vm.machineRevision}
             imageWidth={vm.imageWidth}
             imageHeight={vm.imageHeight}

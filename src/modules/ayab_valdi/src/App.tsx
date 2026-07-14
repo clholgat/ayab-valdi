@@ -452,6 +452,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       stretchH={this.state.stretchH}
       stretchV={this.state.stretchV}
       palette={previewPalette}
+      currentImageSettings={this.state.currentImageSettings}
       knitDisabled={knitDisabled}
       knitDisabledReason={knitDisabledReason}
       isKnitting={this.state.isKnitting}

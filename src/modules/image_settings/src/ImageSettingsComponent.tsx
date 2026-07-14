@@ -60,6 +60,12 @@ export interface ImageSettingsViewModel {
   stretchV?: number;
   /** RGB palette (0xRRGGBB per color index) for the currently loaded pattern. */
   palette?: number[];
+  /**
+   * Host's current settings: a freshly mounted panel (e.g. reopening the
+   * compact drawer) hydrates from these instead of re-deriving defaults,
+   * so the controls keep matching what the preview already shows.
+   */
+  initialSettings?: ImageSettings;
   onSettingsChange?: (settings: ImageSettings) => void;
   onStretchChange?: (stretchH: number, stretchV: number) => void;
   onRepeatChange?: (repeatH: number, repeatV: number) => void;
@@ -139,7 +145,9 @@ export class ImageSettingsComponentInner extends StatefulComponent<
   onCreate(): void {
     this.loadFromPreferences();
     this.applyMachineChange();
-    if (
+    if (this.viewModel.initialSettings) {
+      this.applyInitialSettings(this.viewModel.initialSettings);
+    } else if (
       this.viewModel.imageWidth != null &&
       this.viewModel.imageHeight != null
     ) {
@@ -167,11 +175,14 @@ export class ImageSettingsComponentInner extends StatefulComponent<
     ) {
       this.applyMachineChange();
     }
+    // previous == null is the initial post-mount update: onCreate already
+    // seeded (possibly hydrating from initialSettings) — don't reseed here.
     if (
+      previous != null &&
       this.viewModel.imageWidth != null &&
       this.viewModel.imageHeight != null &&
-      (previous?.imageWidth !== this.viewModel.imageWidth ||
-        previous?.imageHeight !== this.viewModel.imageHeight)
+      (previous.imageWidth !== this.viewModel.imageWidth ||
+        previous.imageHeight !== this.viewModel.imageHeight)
     ) {
       this.updateNeedlesFromImageDimensions();
     }
@@ -197,6 +208,32 @@ export class ImageSettingsComponentInner extends StatefulComponent<
       alignment: prefs.defaultAlignment || Alignment.CENTER,
       autoMirror: prefs.defaultKnitSideImage || false,
     });
+    this.notifySettingsChange();
+  }
+
+  /** Seed the panel from the host's live settings (see initialSettings). */
+  private applyInitialSettings(settings: ImageSettings): void {
+    const machineWidth = this.getMachineWidth();
+    const start = NeedleColor.needleToColorOffset(settings.startNeedle, machineWidth);
+    const stop = NeedleColor.needleToColorOffset(settings.stopNeedle, machineWidth);
+    this.setState({
+      mode: settings.mode,
+      numColors: settings.numColors,
+      startRow: settings.startRow,
+      infRepeat: settings.infRepeat,
+      alignment: settings.alignment,
+      autoMirror: settings.autoMirror,
+      startNeedleColor: start.color,
+      startNeedleOffset: start.offset,
+      stopNeedleColor: stop.color,
+      stopNeedleOffset: stop.offset,
+      numColorsText: String(settings.numColors),
+      startRowText: String(settings.startRow + 1),
+      startNeedleOffsetText: String(start.offset),
+      stopNeedleOffsetText: String(stop.offset),
+    });
+    // Re-emit so the host state converges even after the prefs/machine
+    // seeding above emitted defaults.
     this.notifySettingsChange();
   }
 

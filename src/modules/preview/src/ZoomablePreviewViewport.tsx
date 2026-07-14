@@ -42,6 +42,7 @@ interface ZoomablePreviewState {
   displayBits?: Uint8Array[][];
   rowProgressOverlayPx?: number;
   rowProgressOverlayWidthPx?: number;
+  rowProgressOverlayLeftPx?: number;
   fitsHorizontally?: boolean;
 }
 
@@ -61,9 +62,11 @@ export class ZoomablePreviewViewport extends StatefulComponent<
     vm: ZoomablePreviewViewportViewModel,
     stitchSize: number,
     stitchSizeY: number,
+    imageOffsetPx: number,
   ): {
     rowProgressOverlayPx?: number;
     rowProgressOverlayWidthPx?: number;
+    rowProgressOverlayLeftPx?: number;
   } {
     if (!vm.isKnitting || vm.currentRow == null || vm.currentRow < 0) {
       return {};
@@ -83,6 +86,10 @@ export class ZoomablePreviewViewport extends StatefulComponent<
     return {
       rowProgressOverlayPx: overlayPx,
       rowProgressOverlayWidthPx: needleCount * stitchSize,
+      // The band covers the needle window, which is bed-relative; the overlay
+      // is positioned inside the image grid, so shift by the image's own
+      // offset within the bed.
+      rowProgressOverlayLeftPx: startNeedle * stitchSize - imageOffsetPx,
     };
   }
 
@@ -105,6 +112,7 @@ export class ZoomablePreviewViewport extends StatefulComponent<
       this.viewModel,
       scene.stitchSize,
       scene.stitchSizeY,
+      scene.imageOffsetPx,
     );
     return {
       zoomScale,
@@ -114,6 +122,7 @@ export class ZoomablePreviewViewport extends StatefulComponent<
       displayBits,
       rowProgressOverlayPx: overlay.rowProgressOverlayPx,
       rowProgressOverlayWidthPx: overlay.rowProgressOverlayWidthPx,
+      rowProgressOverlayLeftPx: overlay.rowProgressOverlayLeftPx,
       contentWrapperStyle: styles.contentWrapper(
         width,
         scene.contentWidth,
@@ -287,6 +296,7 @@ export class ZoomablePreviewViewport extends StatefulComponent<
                   imageOffsetPx={scene.imageOffsetPx}
                   rowProgressOverlayPx={s.rowProgressOverlayPx}
                   rowProgressOverlayWidthPx={s.rowProgressOverlayWidthPx}
+                  rowProgressOverlayLeftPx={s.rowProgressOverlayLeftPx}
                 />
               ) : (
                 <FormattedDisplay

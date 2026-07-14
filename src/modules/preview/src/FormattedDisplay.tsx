@@ -57,10 +57,11 @@ const imageGridWrapperStyle = new Style<View>({
 const rowProgressOverlayStyle = (
   heightPx: number,
   widthPx: number,
+  leftPx: number,
 ) =>
   new Style<View>({
     position: "absolute",
-    left: 0,
+    left: leftPx,
     bottom: 0,
     width: widthPx,
     height: heightPx,
@@ -82,6 +83,8 @@ export interface FormattedDisplayViewModel {
   rowProgressOverlayPx?: number;
   /** Width in px of knit-progress band (needle window). */
   rowProgressOverlayWidthPx?: number;
+  /** Left edge of the band relative to the image grid (needle window is bed-relative). */
+  rowProgressOverlayLeftPx?: number;
 }
 
 const DEFAULT_STITCH = 10;
@@ -200,6 +203,7 @@ export class FormattedDisplay extends StatefulComponent<
     stitchStyle: Style<View>,
     rowProgressOverlayPx?: number,
     rowProgressOverlayWidthPx?: number,
+    rowProgressOverlayLeftPx?: number,
   ): void {
     <view style={imageGridWrapperStyle}>
       {(() => {
@@ -228,6 +232,7 @@ export class FormattedDisplay extends StatefulComponent<
           style={rowProgressOverlayStyle(
             rowProgressOverlayPx,
             rowProgressOverlayWidthPx,
+            rowProgressOverlayLeftPx ?? 0,
           )}
         />
       ) : undefined}
@@ -261,6 +266,7 @@ export class FormattedDisplay extends StatefulComponent<
                 s.stitchStyle,
                 vm.rowProgressOverlayPx,
                 vm.rowProgressOverlayWidthPx,
+                vm.rowProgressOverlayLeftPx,
               )}
             </layout>
           </layout>

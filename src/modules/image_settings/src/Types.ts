@@ -43,4 +43,18 @@ export namespace NeedleColor {
       return machineWidth / 2 + offset - 1;
     }
   }
+
+  /**
+   * Inverse of {@link calculateNeedle}: absolute needle → bed side + offset.
+   */
+  export function needleToColorOffset(
+    needle: number,
+    machineWidth: number,
+  ): { color: NeedleColor; offset: number } {
+    const center = machineWidth / 2;
+    if (needle < center) {
+      return { color: NeedleColor.ORANGE, offset: center - needle };
+    }
+    return { color: NeedleColor.GREEN, offset: needle - center + 1 };
+  }
 }
