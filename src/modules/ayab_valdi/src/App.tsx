@@ -33,6 +33,7 @@ import { AppSidebar } from "./AppSidebar";
 import { reportBug } from "app_settings/src/BugReport";
 import { computePreviewPalette } from "./PreviewPalette";
 import { createAppImageHandlers } from "./AppImageHandlers";
+import { settingsForLoadedImage } from "./AppImageLogic";
 import { ActiveTourBubble, InlineTourBubble } from "./InlineTourBubble";
 import { AppKnitFooter } from "./AppKnitFooter";
 import {
@@ -111,8 +112,12 @@ interface State {
   isHardwareTesting: boolean;
   hwTestSession?: HardwareTestSession;
   firstRunTourStep: number | null;
-  /** Narrow-viewport mode: the sidebar moves into a slide-over drawer. */
-  compactLayout: boolean;
+  /**
+   * Narrow-viewport mode: the sidebar moves into a slide-over drawer.
+   * Undefined until the first root layout — neither variant mounts before the
+   * width is known (a premature inline mount would emit default settings).
+   */
+  compactLayout?: boolean;
   sidebarDrawerOpen: boolean;
 }
 
@@ -152,7 +157,6 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     showPreferences: false,
     isHardwareTesting: false,
     firstRunTourStep: null,
-    compactLayout: false,
     sidebarDrawerOpen: false,
   };
 
@@ -216,7 +220,16 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     width: number,
     height: number,
   ): void => {
-    this.setState(this.imageHandlers.handleBitsLoaded(bits, width, height));
+    this.setState({
+      ...this.imageHandlers.handleBitsLoaded(bits, width, height),
+      // Snap the needle window to the new image (host-owned so it works even
+      // when no ImageSettings panel is mounted, e.g. compact layouts).
+      currentImageSettings: settingsForLoadedImage(
+        width,
+        this.state.preferences.machine,
+        this.state.currentImageSettings,
+      ),
+    });
   };
 
   private handleStretchChange = (stretchH: number, stretchV: number): void => {
@@ -482,7 +495,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     tourStep: FirstRunTourStep | undefined,
     tourBubble: ActiveTourBubble | null,
   ): void {
-    if (this.state.compactLayout) {
+    if (this.state.compactLayout !== false) {
       return;
     }
     this.renderAppSidebar(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble, false);
@@ -500,7 +513,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     tourStep: FirstRunTourStep | undefined,
     tourBubble: ActiveTourBubble | null,
   ): void {
-    if (!this.state.compactLayout) {
+    if (this.state.compactLayout !== true) {
       return;
     }
     <layout key="compact-bottom-bar" style={styles.compactBottomBar}>
