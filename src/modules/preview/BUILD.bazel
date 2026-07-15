@@ -27,10 +27,11 @@ valdi_module(
         "res/**/*.png",
         "res/**/*.svg",
         "res/**/*.webp",
-        "raw/**/*.raw",
+        "res/*.raw",
     ]),
     visibility = ["//visibility:public"],
     deps = [
+        "@valdi//src/valdi_modules/src/valdi/drawing",
         "@valdi//src/valdi_modules/src/valdi/valdi_core",
         "@valdi//src/valdi_modules/src/valdi/valdi_tsx",
         "@valdi//src/valdi_modules/src/valdi/valdi_test",

@@ -9,6 +9,10 @@ import { TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from "constants/src/UiTheme"
 import { Style } from "valdi_core/src/Style";
 import { Device } from "valdi_core/src/Device";
 import { getBits } from "process_image/src/ProcessImageNative";
+import {
+  loadModuleResourceBits,
+  parseModuleResource,
+} from "./ModuleResourceBits";
 // @ts-ignore - getBitsAsync may be available in web
 import { getBitsAsync } from "process_image/src/ProcessImageNative";
 import {
@@ -164,6 +168,27 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
         })
         .catch((error: unknown) => {
           console.error("Failed to load image:", error);
+        });
+      return;
+    }
+
+    // Module-resource samples decode through the Valdi asset pipeline
+    // (pixel-exact everywhere); Android R drawables are density-resampled
+    // and unusable for stitch data.
+    if (parseModuleResource(source)) {
+      loadModuleResourceBits(source)
+        .then(bits => {
+          if (this.isDestroyed() || generation !== this.loadGeneration) {
+            return;
+          }
+          if (bits) {
+            this.applyBits(bits, fileName, userSelected);
+            return;
+          }
+          this.applyBits(getBits(source), fileName, userSelected);
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to load sample:", error);
         });
       return;
     }

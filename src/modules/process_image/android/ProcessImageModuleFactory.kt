@@ -11,6 +11,9 @@ class ProcessImageNativeModuleFactoryImpl : ProcessImageNativeModuleFactory() {
         return object : ProcessImageNativeModule {
             // Rows of [R, G, B, A] pixel byte arrays, matching the desktop
             // impl (DesktopProcessImageModule.cpp) and web canvas layout.
+            // Only filesystem paths (native file picker) land here: bundled
+            // sample resources decode in TS via preview/ModuleResourceBits,
+            // because Android R drawables are density-resampled.
             override fun getBits(path: String): List<List<ByteArray>> {
                 val bitmap = BitmapFactory.decodeFile(path) ?: return emptyList()
                 try {
