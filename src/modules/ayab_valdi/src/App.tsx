@@ -143,6 +143,24 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   }));
   private unsubscribePreferences?: () => void;
   private paletteCache: { key: string; palette: number[] } | null = null;
+  /**
+   * `preferences.initialize()` (below) loads the persisted machine model
+   * asynchronously. Until it resolves, `preferences.machine` is still the
+   * temporary default from `new Preferences()`. If a pending image (e.g.
+   * from the pattern-tool "Send to AYAB" handoff) arrives before then,
+   * `handleBitsLoaded` must wait for the real machine width — otherwise the
+   * needle range gets centered against the wrong bed width, and once
+   * ImageSettingsComponent later converts those absolute needle numbers
+   * back to Left/Right labels using the *real* (now-loaded) machine width,
+   * the mismatch shows up as a needle range that isn't centered at all
+   * (e.g. both Start and Stop landing on the same side of the bed).
+   */
+  private preferencesReady = false;
+  private pendingInitialImage?: {
+    bits: Uint8Array[][];
+    width: number;
+    height: number;
+  };
 
   state: State = {
     preferences: new Preferences(),
@@ -188,10 +206,26 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
           firstRunTourStep: startTour ? 0 : null,
           showPreferences: startTour ? true : this.state.showPreferences,
         });
+        this.markPreferencesReadyAndFlushPendingImage();
       })
       .catch((error) => {
         console.error("Failed to initialize preferences:", error);
+        // Fall back to the default machine rather than stranding a pending
+        // image forever if preferences genuinely fail to load.
+        this.markPreferencesReadyAndFlushPendingImage();
       });
+  }
+
+  private markPreferencesReadyAndFlushPendingImage(): void {
+    if (this.isDestroyed()) {
+      return;
+    }
+    this.preferencesReady = true;
+    const pending = this.pendingInitialImage;
+    if (pending) {
+      this.pendingInitialImage = undefined;
+      this.handleBitsLoaded(pending.bits, pending.width, pending.height);
+    }
   }
 
   onDestroy(): void {
@@ -212,6 +246,10 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     const bits = this.viewModel.initialImageBits;
     const height = bits.length;
     const width = height > 0 ? bits[0]!.length : 0;
+    if (!this.preferencesReady) {
+      this.pendingInitialImage = { bits, width, height };
+      return;
+    }
     this.handleBitsLoaded(bits, width, height);
   }
 
