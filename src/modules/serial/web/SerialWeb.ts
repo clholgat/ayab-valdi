@@ -654,3 +654,13 @@ interface AyabMdnsRecord {
 export function browse_ayab_mdns(): AyabMdnsRecord[] {
   return [];
 }
+
+export function requires_usb_permission_prompt(): boolean {
+  return typeof navigator !== "undefined" && "serial" in navigator;
+}
+
+export function prompt_websocket_url(): string | null {
+  return typeof prompt === "function"
+    ? prompt("WebSocket URL (ws://host:port/ws)", "ws://")
+    : null;
+}

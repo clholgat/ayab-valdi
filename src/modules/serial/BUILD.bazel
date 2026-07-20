@@ -2,10 +2,12 @@ load("@valdi//bzl/valdi:valdi_module.bzl", "valdi_module")
 load("@valdi//bzl/valdi:valdi_android_library.bzl", "valdi_android_library")
 
 valdi_android_library(
-    name = "android_impl",
+    name = "serial_android_impl",
     srcs = glob([
         "android/**/*.kt",
     ]),
+    manifest = "android/AndroidManifest.xml",
+    visibility = ["//visibility:public"],
     deps = [
         ":serial_api_kt",
         "@serial_mvn//:com_github_mik3y_usb_serial_for_android",
@@ -13,7 +15,7 @@ valdi_android_library(
 )
 
 objc_library(
-    name = "ios_impl",
+    name = "serial_ios_impl",
     srcs = glob([
         "ios/**/*.m",
     ]),
@@ -21,6 +23,7 @@ objc_library(
         "ios/**/*.h",
     ]),
     copts = ["-I."],
+    visibility = ["//visibility:public"],
     deps = [
         ":serial_api_objc",
     ],
@@ -85,8 +88,8 @@ valdi_module(
         "test/**/*.ts",
         "test/**/*.tsx",
     ]),
-    android_deps = [":android_impl"],
-    ios_deps = [":ios_impl"],
+    android_deps = [":serial_android_impl"],
+    ios_deps = [":serial_ios_impl"],
     native_deps = [":serial_native_impl"],
     ios_module_name = "Serial",
     web_deps = [":serial_web"],

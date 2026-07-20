@@ -6,45 +6,71 @@
 
 @end
 
+// USB-serial (CDC-ACM style, e.g. the FTDI/CH340/Arduino chips AYAB controllers use)
+// has no public iOS API. Unlike Android's USB host mode, Apple restricts USB accessory
+// communication to MFi-certified peripherals via the External Accessory framework — a
+// generic USB-serial adapter can never be MFi-certified for this, so there is no way to
+// implement this on iOS without different, MFi-certified hardware. This is a permanent
+// platform limitation, not a pending TODO: connect over macOS, Android, or a browser
+// with Web Serial support, or over the network if the controller supports Wi-Fi.
+NSString *const SCCSerialNotSupportedExceptionName = @"SCCSerialNotSupportedOnIOS";
+NSString *const SCCSerialNotSupportedReason =
+    @"Serial (USB) connections are not supported on iOS. Apple restricts USB accessory "
+     "communication to MFi-certified peripherals via the External Accessory framework and "
+     "does not expose a generic USB-serial (CDC-ACM) API like Android's USB host mode, so "
+     "this cannot be implemented for standard AYAB USB-serial adapters. Use macOS, Android, "
+     "or a browser with Web Serial support instead.";
+
 @implementation SCCSerialModule
 
-// TODO: Implement the actual serial communication methods
 - (void)close_serial
 {
-    // Implementation needed
+    // Nothing is ever open on iOS — no-op, matching how the other platforms
+    // treat close_serial() as a no-op when there is no active connection.
 }
 
 - (void)open_serialWithUri:(NSString*)uri
 {
-    // Implementation needed
+    @throw [NSException exceptionWithName:SCCSerialNotSupportedExceptionName
+                                    reason:SCCSerialNotSupportedReason
+                                  userInfo:nil];
 }
 
 - (void)writeWithData:(NSData*)data
 {
-    // Implementation needed
+    // Nothing is ever open on iOS — no-op.
 }
 
 - (NSData*)read
 {
-    // Implementation needed
     return [[NSData alloc] init];
 }
 
 - (BOOL)is_open
 {
-    // Implementation needed
     return NO;
 }
 
 - (NSInteger)in_waiting
 {
-    // Implementation needed
     return 0;
 }
 
 - (void)flush
 {
-    // Implementation needed
+    // Nothing is ever open on iOS — no-op.
+}
+
+- (BOOL)requires_usb_permission_prompt
+{
+    // Irrelevant — open_serialWithUri: always throws on iOS, so no USB device
+    // ever needs a consent prompt here.
+    return NO;
+}
+
+- (NSString*)prompt_websocket_url
+{
+    return nil;
 }
 
 @end

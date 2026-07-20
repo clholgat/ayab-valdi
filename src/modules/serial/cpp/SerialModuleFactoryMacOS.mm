@@ -439,6 +439,24 @@ public:
             }
         );
 
+        // requires_usb_permission_prompt function — desktop lists attached ports
+        // directly via IOKit with no OS consent step, unlike Web Serial/Android.
+        auto requiresUsbPermissionPromptFunction = Valdi::makeShared<Valdi::ValueFunctionWithCallable>(
+            [](const Valdi::ValueFunctionCallContext& callContext) -> Valdi::Value {
+                (void)callContext;
+                return Valdi::Value(false);
+            }
+        );
+
+        // prompt_websocket_url function — desktop discovers network devices via
+        // browse_ayab_mdns() instead of manual URL entry.
+        auto promptWebsocketUrlFunction = Valdi::makeShared<Valdi::ValueFunctionWithCallable>(
+            [](const Valdi::ValueFunctionCallContext& callContext) -> Valdi::Value {
+                (void)callContext;
+                return Valdi::Value::undefined();
+            }
+        );
+
         return Valdi::Value()
             .setMapValue("get_serial_ports", Valdi::Value(getSerialPortsFunction))
             .setMapValue("close_serial", Valdi::Value(closeSerialFunction))
@@ -448,7 +466,9 @@ public:
             .setMapValue("is_open", Valdi::Value(isOpenFunction))
             .setMapValue("in_waiting", Valdi::Value(inWaitingFunction))
             .setMapValue("flush", Valdi::Value(flushFunction))
-            .setMapValue("browse_ayab_mdns", Valdi::Value(browseAyabMdnsFunction));
+            .setMapValue("browse_ayab_mdns", Valdi::Value(browseAyabMdnsFunction))
+            .setMapValue("requires_usb_permission_prompt", Valdi::Value(requiresUsbPermissionPromptFunction))
+            .setMapValue("prompt_websocket_url", Valdi::Value(promptWebsocketUrlFunction));
     }
 };
 

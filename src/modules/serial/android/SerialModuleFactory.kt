@@ -1,9 +1,14 @@
 package com.snap.modules.serial
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
+import android.os.Build
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
@@ -12,12 +17,15 @@ import com.snap.valdi.modules.RegisterValdiModule
 import com.snap.modules.serial.SerialModuleFactory
 import com.snap.modules.serial.SerialModule
 import com.snap.valdi.promise.Promise
+import com.snap.valdi.promise.ResolvablePromise
 import com.snap.valdi.promise.ResolvedPromise
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+
+private const val USB_PERMISSION_ACTION = "com.snap.modules.serial.USB_PERMISSION"
 
 @RegisterValdiModule
 class SerialModuleFactoryImpl: SerialModuleFactory() {
@@ -96,24 +104,11 @@ class SerialModuleImpl: SerialModule {
     }
     
     private fun openUsbSerial(uri: String) {
-        // Get Android Context - this needs to be provided by Valdi runtime
-        // For now, we'll try to get it from the application context
-        // In a real implementation, this should be passed from the Valdi runtime
-        context = try {
-            // Try to get context from application
-            // This is a placeholder - actual implementation needs Valdi runtime support
-            null // Will be set when Valdi provides context access
-        } catch (e: Exception) {
-            null
-        }
-        
-        if (context == null) {
-            throw UnsupportedOperationException(
-                "Android Context is required for USB serial communication. " +
-                "This needs to be provided by the Valdi runtime."
+        context = SerialAppContext.applicationContext
+            ?: throw IOException(
+                "Android Context is not yet available (SerialAppContextProvider hasn't run)."
             )
-        }
-        
+
         usbManager = context!!.getSystemService(Context.USB_SERVICE) as? UsbManager
             ?: throw IOException("USB service not available")
         
@@ -250,9 +245,19 @@ class SerialModuleImpl: SerialModule {
     }
 
     override fun get_serial_ports(): List<String> {
-        // Machine I/O is desktop-driven in v1; the Android app is prep/preview
-        // only, so no ports are surfaced until USB-host support lands.
-        return emptyList()
+        // Only devices we already hold USB permission for — matches the web
+        // implementation's "previously authorized USB devices" contract. A
+        // newly-attached, not-yet-permitted device is only reachable via
+        // request_serial_port()'s consent flow, same as on web.
+        val ctx = SerialAppContext.applicationContext ?: return emptyList()
+        val manager = ctx.getSystemService(Context.USB_SERVICE) as? UsbManager
+            ?: return emptyList()
+        return manager.deviceList.values
+            .filter { device ->
+                manager.hasPermission(device) &&
+                    UsbSerialProber.getDefaultProber().probeDevice(device) != null
+            }
+            .map { it.deviceName }
     }
 
     override fun consumeReadBuffer(bytesToConsume: Double) {
@@ -266,15 +271,71 @@ class SerialModuleImpl: SerialModule {
     }
 
     override fun request_serial_port(): Promise<String?> {
-        return ResolvedPromise(null)
+        val ctx = SerialAppContext.applicationContext ?: return ResolvedPromise(null)
+        val manager = ctx.getSystemService(Context.USB_SERVICE) as? UsbManager
+            ?: return ResolvedPromise(null)
+
+        val candidate = manager.deviceList.values.firstOrNull { device ->
+            !manager.hasPermission(device) &&
+                UsbSerialProber.getDefaultProber().probeDevice(device) != null
+        } ?: return ResolvedPromise(null)
+
+        val promise = ResolvablePromise<String?>()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context, intent: Intent) {
+                if (intent.action != USB_PERMISSION_ACTION) {
+                    return
+                }
+                try {
+                    ctx.unregisterReceiver(this)
+                } catch (e: Exception) {
+                    // Already unregistered — ignore.
+                }
+                val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                promise.fulfillSuccess(if (granted) candidate.deviceName else null)
+            }
+        }
+
+        val filter = IntentFilter(USB_PERMISSION_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ctx.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            ctx.registerReceiver(receiver, filter)
+        }
+
+        val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+        val permissionIntent = PendingIntent.getBroadcast(
+            ctx,
+            0,
+            Intent(USB_PERMISSION_ACTION),
+            pendingIntentFlags,
+        )
+        manager.requestPermission(candidate, permissionIntent)
+
+        return promise
     }
 
     override fun refresh_serial_ports(): Promise<List<String>> {
-        return ResolvedPromise(emptyList())
+        // UsbManager.deviceList is always current — no separate rescan step needed.
+        return ResolvedPromise(get_serial_ports())
     }
 
     override fun browse_ayab_mdns(): List<Map<String, Any?>> {
         return emptyList()
+    }
+
+    override fun requires_usb_permission_prompt(): Boolean {
+        // Android USB host mode requires runtime consent per not-yet-permitted
+        // device — see request_serial_port() above.
+        return true
+    }
+
+    override fun prompt_websocket_url(): String? {
+        // No manual URL entry on Android — network devices are discovered via
+        // browse_ayab_mdns() instead (once implemented).
+        return null
     }
 
     override fun registerDataAvailableResolver(resolver: () -> Unit): () -> Unit {

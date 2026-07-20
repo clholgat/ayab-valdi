@@ -36,6 +36,19 @@ export declare function refresh_serial_ports(): Promise<string[]>;
 /** Browse _ayab._tcp.local. services. macOS uses Bonjour; other platforms return []. */
 export declare function browse_ayab_mdns(): any[];
 
+// Whether this platform requires an explicit consent step (a "Select USB
+// device..." prompt that calls request_serial_port()) before a new physical
+// USB device shows up in get_serial_ports(). True on Web (Web Serial
+// permission) and Android (runtime USB permission); false on iOS (USB serial
+// isn't supported at all) and macOS/Linux desktop (list every attached
+// device directly, no OS consent step).
+export declare function requires_usb_permission_prompt(): boolean;
+
+// Prompt the user for a manual WebSocket URL (web only — native platforms
+// discover network devices via browse_ayab_mdns() instead). Returns null if
+// unsupported, or if the user cancels.
+export declare function prompt_websocket_url(): string | null;
+
 // Register a resolver to be called when data arrives in the background read loop (web only)
 // On web: Registers a callback that will be invoked when new data is received
 // Returns a function that removes the resolver from the array when called

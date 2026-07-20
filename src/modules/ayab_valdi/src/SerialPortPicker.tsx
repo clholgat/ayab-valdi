@@ -12,10 +12,6 @@ import {
   uriForEntryIndex,
 } from "./SerialPortList";
 
-function isWebSerialSupported(): boolean {
-  return typeof navigator !== "undefined" && "serial" in navigator;
-}
-
 import { StatefulComponent } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
 import { Label, View, Layout } from "valdi_tsx/src/NativeTemplateElements";
@@ -40,6 +36,8 @@ import {
   get_serial_ports,
   request_serial_port,
   refresh_serial_ports,
+  requires_usb_permission_prompt,
+  prompt_websocket_url,
 } from "serial/src/Serial";
 import {
   getNetworkServices,
@@ -92,7 +90,7 @@ export class SerialPortPicker extends StatefulComponent<
     if (e2eWs) {
       const entries = buildPortList(
         get_serial_ports(),
-        isWebSerialSupported(),
+        requires_usb_permission_prompt(),
         getNetworkServices(),
         Device.isWeb(),
       );
@@ -120,7 +118,7 @@ export class SerialPortPicker extends StatefulComponent<
     const physicalPorts = get_serial_ports();
     const entries = buildPortList(
       physicalPorts,
-      isWebSerialSupported(),
+      requires_usb_permission_prompt(),
       getNetworkServices(),
       Device.isWeb(),
     );
@@ -170,7 +168,7 @@ export class SerialPortPicker extends StatefulComponent<
       return;
     }
 
-    if (isWebSerialSupported() && entry.uri === SELECT_USB_LABEL) {
+    if (requires_usb_permission_prompt() && entry.uri === SELECT_USB_LABEL) {
       const previousIndex = this.state.selectedSerialPortIndex;
       try {
         const portName = await request_serial_port();
@@ -199,15 +197,12 @@ export class SerialPortPicker extends StatefulComponent<
 
     if (entry.uri === ADD_WEBSOCKET_LABEL) {
       const previousIndex = this.state.selectedSerialPortIndex;
-      const entered =
-        typeof prompt === "function"
-          ? prompt("WebSocket URL (ws://host:port/ws)", "ws://")
-          : null;
+      const entered = prompt_websocket_url();
       if (entered && entered.startsWith("ws")) {
         registerManualWebSocketService({ label: entered, uri: entered });
         const entries = buildPortList(
           get_serial_ports(),
-          isWebSerialSupported(),
+          requires_usb_permission_prompt(),
           getNetworkServices(),
           Device.isWeb(),
         );
