@@ -74,9 +74,16 @@ export function computeSceneLayout(
     baseStitchSize = viewportWidth / vm.imageWidth;
   }
 
-  const stitchSize = baseStitchSize * zoomScale;
-  const stitchSizeY =
-    stitchSize * aspectRatioVerticalScale(vm.aspectRatio ?? 0);
+  // Rounded to a whole pixel so every downstream measurement (grid cells laid
+  // out by flexbox, needle marker lines, row-progress overlay) accumulates
+  // from the exact same integral unit. A fractional stitchSize causes the
+  // flexbox-rendered cells and the absolutely-positioned overlays to round
+  // independently, drifting apart differently at different zoom levels.
+  const stitchSize = Math.max(1, Math.round(baseStitchSize * zoomScale));
+  const stitchSizeY = Math.max(
+    1,
+    Math.round(stitchSize * aspectRatioVerticalScale(vm.aspectRatio ?? 0)),
+  );
   const contentWidth = hasMachineScene
     ? machineWidth! * stitchSize
     : vm.imageWidth * stitchSize;

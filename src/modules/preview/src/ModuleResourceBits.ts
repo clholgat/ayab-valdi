@@ -4,14 +4,18 @@ import {
   AssetOutputType,
 } from "valdi_core/src/Asset";
 import { decodeBitmap } from "drawing/src/BitmapFactory";
+import { SAMPLE_PATTERN_IMAGE_BASE64 } from "./SamplePatternImageData";
 
 /**
- * Decodes bundled sample patterns from module resources, pixel-exact on
- * every platform. Android R drawables are density-resampled by the
- * packaging, so bytes come from the Valdi asset pipeline instead: direct
- * file entries where the runtime exposes them, otherwise an asset load
- * observer with the BYTES output type (the AssetsManager path the desktop
- * C++ implementation uses).
+ * Decodes bundled sample patterns pixel-exact on every platform. Sample
+ * bytes come from SAMPLE_PATTERN_IMAGE_BASE64 (embedded in the JS bundle)
+ * rather than the module's packaged res/ files: on Android, res/*.png gets
+ * re-encoded into per-density WebP drawables, and both the direct file-entry
+ * lookup and the asset-load observer below ultimately resolve through that
+ * same drawable pipeline, so neither actually yields the original bytes.
+ * WebP is lossy and density-scales the image, which turns hard black/white
+ * stitch edges into gray compression artifacts. The lookups below remain as
+ * a fallback for resources outside the embedded set.
  */
 
 export function parseModuleResource(
@@ -77,7 +81,7 @@ function assetBytes(source: string): Promise<Uint8Array | null> {
   });
 }
 
-function bitsFromEncodedBytes(bytes: Uint8Array): Uint8Array[][] | null {
+function bitsFromEncodedBytes(bytes: Uint8Array | string): Uint8Array[][] | null {
   const bitmap = decodeBitmap(bytes);
   try {
     const info = bitmap.getInfo();
@@ -113,6 +117,14 @@ export async function loadModuleResourceBits(
   const resource = parseModuleResource(source);
   if (!resource) {
     return null;
+  }
+  const embedded = SAMPLE_PATTERN_IMAGE_BASE64[resource.stem];
+  if (embedded) {
+    try {
+      return bitsFromEncodedBytes(embedded);
+    } catch {
+      return null;
+    }
   }
   const direct = moduleFileBytes(resource.module, resource.stem);
   const bytes = direct ?? (await assetBytes(source));
