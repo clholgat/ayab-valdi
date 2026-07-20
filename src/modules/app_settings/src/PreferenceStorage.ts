@@ -1,4 +1,3 @@
-import { Device } from "valdi_core/src/Device";
 import { PersistentStore } from "persistence/src/PersistentStore";
 
 export interface PreferenceStorage {
@@ -22,29 +21,6 @@ export class PersistentStorePreferenceStorage implements PreferenceStorage {
   }
 }
 
-/** Web fallback: survives full page reload (unlike in-memory PersistentStore native). */
-export class LocalStoragePreferenceStorage implements PreferenceStorage {
-  constructor(private readonly prefix: string) {}
-
-  private storageKey(key: string): string {
-    return `${this.prefix}:${key}`;
-  }
-
-  async fetchString(key: string): Promise<string | undefined> {
-    if (typeof localStorage === "undefined") {
-      return undefined;
-    }
-    return localStorage.getItem(this.storageKey(key)) ?? undefined;
-  }
-
-  async storeString(key: string, value: string): Promise<void> {
-    if (typeof localStorage === "undefined") {
-      return;
-    }
-    localStorage.setItem(this.storageKey(key), value);
-  }
-}
-
 export class InMemoryPreferenceStorage implements PreferenceStorage {
   private readonly data = new Map<string, string>();
 
@@ -64,9 +40,6 @@ export class InMemoryPreferenceStorage implements PreferenceStorage {
 export function createDefaultPreferenceStorage(
   storeName: string = "ayab_preferences",
 ): PreferenceStorage {
-  if (Device.isWeb()) {
-    return new LocalStoragePreferenceStorage(storeName);
-  }
   return new PersistentStorePreferenceStorage(
     new PersistentStore(storeName, {
       deviceGlobal: true,

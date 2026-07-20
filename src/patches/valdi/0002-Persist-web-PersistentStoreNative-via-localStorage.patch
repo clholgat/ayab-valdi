@@ -1,0 +1,135 @@
+--- a/src/valdi_modules/src/valdi/persistence/web/PersistentStoreNative.ts
++++ b/src/valdi_modules/src/valdi/persistence/web/PersistentStoreNative.ts
+@@ -25,10 +25,95 @@
+ 
+ const isExpired = (e: Entry) => e.expiresAt !== undefined && nowSec() >= e.expiresAt;
+ 
++// Mirrors each store's Map into localStorage so data survives a page reload
++// (the in-memory Map alone does not). Falls back to memory-only silently —
++// private browsing, storage quota, or a non-browser test host may disallow
++// localStorage entirely.
++const LOCAL_STORAGE_PREFIX = 'valdi_persistent_store:';
++
++function hasLocalStorage(): boolean {
++  try {
++    return typeof localStorage !== 'undefined';
++  } catch {
++    return false;
++  }
++}
++
++type SerializedEntry = {
++  value: string;
++  isBuffer: boolean;
++  weight?: number;
++  expiresAt?: number;
++};
++
++function bufToBase64(b: ArrayBuffer): string {
++  const bytes = new Uint8Array(b);
++  let binary = '';
++  for (let i = 0; i < bytes.length; i++) {
++    binary += String.fromCharCode(bytes[i]);
++  }
++  return btoa(binary);
++}
++
++function base64ToBuf(s: string): ArrayBuffer {
++  const binary = atob(s);
++  const bytes = new Uint8Array(binary.length);
++  for (let i = 0; i < binary.length; i++) {
++    bytes[i] = binary.charCodeAt(i);
++  }
++  return bytes.buffer;
++}
++
++function loadFromLocalStorage(storeName: string): Map<string, Entry> {
++  const map = new Map<string, Entry>();
++  if (!hasLocalStorage()) {
++    return map;
++  }
++  try {
++    const raw = localStorage.getItem(LOCAL_STORAGE_PREFIX + storeName);
++    if (!raw) {
++      return map;
++    }
++    const parsed = JSON.parse(raw) as Record<string, SerializedEntry>;
++    Object.keys(parsed).forEach((key) => {
++      const serialized = parsed[key];
++      map.set(key, {
++        value: serialized.isBuffer ? base64ToBuf(serialized.value) : serialized.value,
++        weight: serialized.weight,
++        expiresAt: serialized.expiresAt,
++      });
++    });
++  } catch {
++    // Corrupt or unreadable persisted state — start this session in memory only.
++  }
++  return map;
++}
++
++function persistToLocalStorage(storeName: string, store: Map<string, Entry>): void {
++  if (!hasLocalStorage()) {
++    return;
++  }
++  try {
++    const out: Record<string, SerializedEntry> = {};
++    store.forEach((entry, key) => {
++      const isBuffer = entry.value instanceof ArrayBuffer;
++      out[key] = {
++        value: isBuffer ? bufToBase64(entry.value as ArrayBuffer) : (entry.value as string),
++        isBuffer,
++        weight: entry.weight,
++        expiresAt: entry.expiresAt,
++      };
++    });
++    localStorage.setItem(LOCAL_STORAGE_PREFIX + storeName, JSON.stringify(out));
++  } catch {
++    // Quota exceeded or storage unavailable — keep serving from memory this session.
++  }
++}
++
+ const getMemoryStore = (storeName: string): Map<string, Entry> => {
+   let store = memoryStores.get(storeName);
+   if (!store) {
+-    store = new Map<string, Entry>();
++    store = loadFromLocalStorage(storeName);
+     memoryStores.set(storeName, store);
+   }
+   return store;
+@@ -51,7 +136,9 @@
+             ttlSeconds === undefined ? undefined :
+             ttlSeconds <= 0 ? nowSec() : nowSec() + Math.floor(ttlSeconds),
+         };
+-        getMemoryStore(storeName).set(storageKey(storeName, key), entry);
++        const store = getMemoryStore(storeName);
++        store.set(storageKey(storeName, key), entry);
++        persistToLocalStorage(storeName, store);
+         completion();
+       } catch (e: unknown) {
+         completion(String(e instanceof Error ? e.message : e ?? 'store failed'));
+@@ -119,7 +206,9 @@
+   remove(key: string, completion: (error?: string) => void) {
+     microtask(() => {
+       try {
+-        getMemoryStore(storeName).delete(storageKey(storeName, key));
++        const store = getMemoryStore(storeName);
++        store.delete(storageKey(storeName, key));
++        persistToLocalStorage(storeName, store);
+         completion();
+       } catch (e: unknown) {
+         completion(String(e instanceof Error ? e.message : e ?? 'remove failed'));
+@@ -131,6 +220,13 @@
+     microtask(() => {
+       try {
+         memoryStores.delete(storeName);
++        if (hasLocalStorage()) {
++          try {
++            localStorage.removeItem(LOCAL_STORAGE_PREFIX + storeName);
++          } catch {
++            // Storage unavailable — memory-side removal above still succeeded.
++          }
++        }
+         completion();
+       } catch (e: unknown) {
+         completion(String(e instanceof Error ? e.message : e ?? 'removeAll failed'));
