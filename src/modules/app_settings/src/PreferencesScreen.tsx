@@ -4,8 +4,10 @@
 
 import { StatefulComponent } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
-import { View, Layout, Label } from "valdi_tsx/src/NativeTemplateElements";
+import { createReusableCallback } from "valdi_core/src/utils/Callback";
+import { Label, Layout, ScrollView, View } from "valdi_tsx/src/NativeTemplateElements";
 import { sansBoldFont, sansFont, BUTTON_FONT_SMALL } from "constants/src/Typography";
+import { TEXT_PRIMARY, TEXT_SECONDARY } from "constants/src/UiTheme";
 import { Preferences } from "./Preferences";
 import { PreferencesProvider } from "./PreferencesProvider";
 import { AspectRatio } from "./Types";
@@ -14,7 +16,6 @@ import {
   withProviders,
   ProvidersValuesViewModel,
 } from "valdi_core/src/provider/withProviders";
-import { IndexPicker } from "widgets/src/components/pickers/IndexPicker";
 import {
   CoreButton,
   CoreButtonColoring,
@@ -30,6 +31,16 @@ import {
   sidebarCardStyle,
   SIDEBAR_FIELD_HEIGHT,
 } from "constants/src/SidebarStyles";
+
+/** Which (if any) of the field option-picker modals is currently open. */
+type PickerKind = "machine" | "aspectRatio";
+
+interface ActivePickerConfig {
+  title: string;
+  labels: string[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+}
 
 export interface PreferencesScreenViewModel {
   onClose: () => void;
@@ -52,6 +63,7 @@ interface State {
   quietMode: boolean;
   disableHardwareBeep: boolean;
   subView: "main" | "about";
+  openPicker: PickerKind | null;
 }
 
 class PreferencesScreenInner extends StatefulComponent<
@@ -64,6 +76,7 @@ class PreferencesScreenInner extends StatefulComponent<
     quietMode: Preferences.DEFAULT_QUIET_MODE,
     disableHardwareBeep: Preferences.DEFAULT_DISABLE_HARDWARE_BEEP,
     subView: "main",
+    openPicker: null,
   };
 
   private get preferences(): Preferences {
@@ -142,23 +155,139 @@ class PreferencesScreenInner extends StatefulComponent<
     this.viewModel.onRestartTour?.();
   };
 
+  private openMachinePicker = (): void => {
+    this.setState({ openPicker: "machine" });
+  };
+
+  private openAspectRatioPicker = (): void => {
+    this.setState({ openPicker: "aspectRatio" });
+  };
+
+  private closePicker = (): void => {
+    this.setState({ openPicker: null });
+  };
+
+  /**
+   * Rendered once, as the last child of the top-level settings card, so its
+   * absolute-position overlay paints over every field regardless of which
+   * one triggered it (matches ImageSettingsComponent's shared-picker-modal
+   * approach in the image_settings module).
+   */
+  private getActivePickerConfig(): ActivePickerConfig | null {
+    switch (this.state.openPicker) {
+      case "machine":
+        return {
+          title: "Machine",
+          labels: Machine.getAllLabels(),
+          selectedIndex: this.state.machineIndex,
+          onSelect: this.handleMachineChange,
+        };
+      case "aspectRatio":
+        return {
+          title: "Aspect ratio",
+          labels: AspectRatio.getAllLabels(),
+          selectedIndex: this.state.aspectRatioIndex,
+          onSelect: this.handleAspectRatioChange,
+        };
+      default:
+        return null;
+    }
+  }
+
+  private handleActivePickerSelect = (index: number): void => {
+    this.getActivePickerConfig()?.onSelect(index);
+    this.closePicker();
+  };
+
   private renderPickerRow(
     label: string,
-    index: number,
-    labels: string[],
-    onChange: (index: number) => void,
+    value: string,
+    accessibilityId: string,
+    onOpen: () => void,
   ): void {
     <layout style={styles.fieldRow}>
       <label style={styles.fieldLabel} value={label} />
       <layout style={styles.pickerWrap}>
-        <IndexPicker
+        <view
+          accessibilityId={accessibilityId}
+          key={accessibilityId}
           style={styles.picker}
-          index={index}
-          labels={labels}
-          onChange={onChange}
-        />
+          backgroundColor="#FFFFFF"
+          borderColor="#D6D0C8"
+          borderWidth={1}
+          onTap={onOpen}
+        >
+          <layout style={styles.pickerTriggerRow}>
+            <label style={styles.pickerTriggerValue} value={value} numberOfLines={1} />
+            <label style={styles.pickerTriggerChevron} value="⌄" />
+          </layout>
+        </view>
       </layout>
     </layout>;
+  }
+
+  private renderPickerModal(): void {
+    const active = this.getActivePickerConfig();
+    if (!active) {
+      return;
+    }
+    <view accessibilityId="preferences-picker-modal" key="preferences-picker-modal" style={styles.modalOverlay}>
+      <view
+        accessibilityId="preferences-picker-modal-backdrop"
+        key="preferences-picker-modal-backdrop"
+        style={styles.modalBackdrop}
+        onTap={this.closePicker}
+      />
+      <view
+        style={styles.modalDialog}
+        backgroundColor={SIDEBAR_CARD_BACKGROUND}
+        borderColor={SIDEBAR_CARD_BORDER}
+        borderWidth={1}
+      >
+        <layout style={styles.modalDialogInner}>
+          <layout style={styles.modalHeaderRow}>
+            <label style={styles.modalTitle} value={active.title} />
+            <ModalCloseButton
+              accessibilityId="preferences-picker-modal-close"
+              onTap={this.closePicker}
+            />
+          </layout>
+          <scroll accessibilityId="preferences-picker-modal-scroll" style={styles.modalScrollArea}>
+            <layout style={styles.modalScrollContent}>
+              {active.labels.map((label, index) => this.renderPickerOption(label, index, active.selectedIndex))}
+            </layout>
+          </scroll>
+          <layout style={styles.modalFooterRow}>
+            <CoreButton
+              accessibilityId="preferences-picker-modal-cancel"
+              text="Cancel"
+              onTap={this.closePicker}
+              coloring={CoreButtonColoring.SECONDARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
+            />
+          </layout>
+        </layout>
+      </view>
+    </view>;
+  }
+
+  private renderPickerOption(label: string, index: number, selectedIndex: number): void {
+    const selected = index === selectedIndex;
+    <view
+      key={`preferences-picker-option-${index}`}
+      accessibilityId={`preferences-picker-option-${index}`}
+      style={styles.modalListRow}
+      backgroundColor={selected ? "#E8EEF9" : "transparent"}
+      onTap={createReusableCallback(() => this.handleActivePickerSelect(index))}
+      touchAreaExtension={4}
+    >
+      <label
+        style={selected ? styles.modalListLabelSelected : styles.modalListLabel}
+        value={label}
+      />
+      {selected ? <label style={styles.modalCheckmark} value="✓" /> : <layout />}
+    </view>;
   }
 
   private renderBeepRow(
@@ -216,9 +345,9 @@ class PreferencesScreenInner extends StatefulComponent<
       >
         {this.renderPickerRow(
           "Machine",
-          this.state.machineIndex,
-          Machine.getAllLabels(),
-          this.handleMachineChange,
+          Machine.getAllLabels()[this.state.machineIndex] ?? "",
+          "machine-picker",
+          this.openMachinePicker,
         )}
         <label
           style={styles.fieldHint}
@@ -227,9 +356,9 @@ class PreferencesScreenInner extends StatefulComponent<
       </view>
       {this.renderPickerRow(
         "Aspect ratio",
-        this.state.aspectRatioIndex,
-        AspectRatio.getAllLabels(),
-        this.handleAspectRatioChange,
+        AspectRatio.getAllLabels()[this.state.aspectRatioIndex] ?? "",
+        "aspect-ratio-picker",
+        this.openAspectRatioPicker,
       )}
       {this.renderBeepRow(
         "App beeps",
@@ -338,6 +467,7 @@ class PreferencesScreenInner extends StatefulComponent<
           ? this.renderAboutView()
           : this.renderMainView()}
       </layout>
+      {this.renderPickerModal()}
     </view>;
   }
 }
@@ -391,6 +521,138 @@ const styles = {
   picker: new Style<View>({
     width: "100%",
     height: SIDEBAR_FIELD_HEIGHT,
+    flexShrink: 0,
+  }),
+  pickerTriggerRow: new Style<Layout>({
+    width: "100%",
+    height: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 10,
+    paddingRight: 8,
+  }),
+  pickerTriggerValue: new Style<Label>({
+    font: sansFont(15),
+    color: TEXT_PRIMARY,
+    flexGrow: 1,
+    flexShrink: 1,
+  }),
+  pickerTriggerChevron: new Style<Label>({
+    font: sansFont(13),
+    color: TEXT_SECONDARY,
+    flexShrink: 0,
+    marginLeft: 4,
+  }),
+  modalOverlay: new Style<View>({
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "column",
+    padding: 16,
+  }),
+  modalBackdrop: new Style<View>({
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+  }),
+  modalDialog: new Style<View>({
+    width: "100%",
+    maxWidth: 360,
+    minHeight: 160,
+    maxHeight: 480,
+    borderRadius: 12,
+    flexDirection: "column",
+    flexShrink: 1,
+  }),
+  modalDialogInner: new Style<Layout>({
+    width: "100%",
+    height: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+    flexDirection: "column",
+  }),
+  modalHeaderRow: new Style<Layout>({
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingTop: 12,
+    paddingBottom: 8,
+    flexShrink: 0,
+  }),
+  modalTitle: new Style<Label>({
+    font: sansFont(18),
+    color: TEXT_PRIMARY,
+    flexGrow: 1,
+    flexShrink: 1,
+  }),
+  modalScrollArea: new Style<ScrollView>({
+    width: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+  }),
+  modalScrollContent: new Style<Layout>({
+    width: "100%",
+    flexDirection: "column",
+    paddingLeft: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    flexShrink: 0,
+  }),
+  modalListRow: new Style<View>({
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 12,
+    paddingRight: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderRadius: 8,
+    flexShrink: 0,
+  }),
+  modalListLabel: new Style<Label>({
+    font: sansFont(15),
+    color: TEXT_PRIMARY,
+    flexGrow: 1,
+    flexShrink: 1,
+  }),
+  modalListLabelSelected: new Style<Label>({
+    font: sansFont(15),
+    color: "#2563EB",
+    flexGrow: 1,
+    flexShrink: 1,
+  }),
+  modalCheckmark: new Style<Label>({
+    font: sansFont(15),
+    color: "#2563EB",
+    flexShrink: 0,
+    marginLeft: 8,
+  }),
+  modalFooterRow: new Style<Layout>({
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
     flexShrink: 0,
   }),
   machineSection: new Style<View>({

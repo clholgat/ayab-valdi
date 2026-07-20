@@ -14,7 +14,6 @@ import {
   helpHintButtonStyle,
 } from "constants/src/HelpHint";
 import { CoreToggle } from "widgets/src/components/toggle/CoreToggle";
-import { IndexPicker } from "widgets/src/components/pickers/IndexPicker";
 import { SIDEBAR_FIELD_HEIGHT } from "constants/src/SidebarStyles";
 import { TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from "constants/src/UiTheme";
 
@@ -51,6 +50,62 @@ function compactPickerStyle(width: number): Style<View> {
   }
   return style;
 }
+
+export interface PickerTriggerViewModel {
+  accessibilityId: string;
+  style: Style<View>;
+  value: string;
+  onTap: () => void;
+}
+
+/** Button that opens an OptionPickerModal, replacing the native drum-roll IndexPicker. */
+export class PickerTrigger extends Component<PickerTriggerViewModel> {
+  onRender(): void {
+    const vm = this.viewModel;
+    <view
+      accessibilityId={vm.accessibilityId}
+      key={vm.accessibilityId}
+      style={vm.style}
+      backgroundColor="#FFFFFF"
+      borderColor="#D6D0C8"
+      borderWidth={1}
+      onTap={vm.onTap}
+    >
+      <layout style={pickerTriggerStyles.row}>
+        <label
+          style={pickerTriggerStyles.valueLabel}
+          value={vm.value}
+          numberOfLines={1}
+        />
+        <label style={pickerTriggerStyles.chevron} value="⌄" />
+      </layout>
+    </view>;
+  }
+}
+
+const pickerTriggerStyles = {
+  row: new Style<Layout>({
+    width: "100%",
+    height: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingLeft: 10,
+    paddingRight: 8,
+  }),
+  valueLabel: new Style<Label>({
+    font: sansFont(15),
+    color: TEXT_PRIMARY,
+    flexGrow: 1,
+    flexShrink: 1,
+  }),
+  chevron: new Style<Label>({
+    font: sansFont(13),
+    color: TEXT_SECONDARY,
+    flexShrink: 0,
+    marginLeft: 4,
+  }),
+};
 
 export interface SettingsSectionTitleViewModel {
   title: string;
@@ -127,21 +182,24 @@ export interface IndexPickerFieldViewModel {
   label: string;
   index: number;
   labels: string[];
-  onChange: (index: number) => void;
+  /** Opens the shared OptionPickerModal owned by the top-level settings card. */
+  onOpenPicker: () => void;
+  accessibilityId?: string;
 }
 
 export class IndexPickerField extends Component<IndexPickerFieldViewModel> {
   onRender(): void {
     const vm = this.viewModel;
     const pickerWidth = estimateIndexPickerWidth(vm.labels);
+    const triggerId = vm.accessibilityId ?? `${vm.label.toLowerCase()}-picker`;
     <layout style={fieldStyles.fieldRow}>
       <label style={fieldStyles.fieldLabel} value={vm.label} />
       <layout style={fieldStyles.compactPickerWrap}>
-        <IndexPicker
+        <PickerTrigger
+          accessibilityId={triggerId}
           style={compactPickerStyle(pickerWidth)}
-          index={vm.index}
-          labels={vm.labels}
-          onChange={vm.onChange}
+          value={vm.labels[vm.index] ?? ""}
+          onTap={vm.onOpenPicker}
         />
       </layout>
     </layout>;
@@ -228,15 +286,18 @@ export interface NeedleOffsetStepperViewModel {
   onOffsetChange: (event: EditTextEvent) => void;
   onDecrement: () => void;
   onIncrement: () => void;
-  onColorChange: (index: number) => void;
+  /** Opens the shared OptionPickerModal owned by the top-level settings card. */
+  onOpenPicker: () => void;
   decrementId?: string;
   incrementId?: string;
+  accessibilityId?: string;
 }
 
 export class NeedleOffsetStepper extends Component<NeedleOffsetStepperViewModel> {
   onRender(): void {
     const vm = this.viewModel;
     const pickerWidth = estimateIndexPickerWidth(vm.colorLabels);
+    const triggerId = vm.accessibilityId ?? `${vm.label.toLowerCase()}-bed-picker`;
     <layout style={fieldStyles.fieldRow}>
       <label style={fieldStyles.fieldLabel} value={vm.label} />
       <layout style={fieldStyles.controlColumnInline}>
@@ -273,11 +334,11 @@ export class NeedleOffsetStepper extends Component<NeedleOffsetStepperViewModel>
           </view>
         </layout>
         <layout style={fieldStyles.compactPickerWrapIndented}>
-          <IndexPicker
+          <PickerTrigger
+            accessibilityId={triggerId}
             style={compactPickerStyle(pickerWidth)}
-            index={vm.colorIndex}
-            labels={vm.colorLabels}
-            onChange={vm.onColorChange}
+            value={vm.colorLabels[vm.colorIndex] ?? ""}
+            onTap={vm.onOpenPicker}
           />
         </layout>
       </layout>

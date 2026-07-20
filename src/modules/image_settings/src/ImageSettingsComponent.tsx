@@ -20,6 +20,7 @@ import {
   SettingsSectionTitle,
   ToggleField,
 } from "./ImageSettingsFieldControls";
+import { OptionPickerModal } from "./OptionPickerModal";
 import { ImageSettingsTransformSection } from "./ImageSettingsTransformSection";
 import { HelpHint } from "constants/src/HelpHint";
 import { KNIT_SIDE_IMAGE_HINT } from "preview/src/KnitSidePreviewLogic";
@@ -90,6 +91,9 @@ export interface ImageSettings {
   autoMirror: boolean;
 }
 
+/** Which (if any) of the field OptionPickerModals is currently open. */
+type PickerKind = "mode" | "alignment" | "startBed" | "stopBed";
+
 interface State {
   mode: Mode;
   numColors: number;
@@ -109,6 +113,7 @@ interface State {
   repeatVText: string;
   stretchHText: string;
   stretchVText: string;
+  openPicker: PickerKind | null;
 }
 
 export class ImageSettingsComponentInner extends StatefulComponent<
@@ -134,6 +139,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
     repeatVText: "1",
     stretchHText: "1",
     stretchVText: "1",
+    openPicker: null,
   };
 
   private unsubscribePreferences?: () => void;
@@ -303,6 +309,80 @@ export class ImageSettingsComponentInner extends StatefulComponent<
   private handleStopNeedleColorChange = (index: number): void => {
     this.setState({ stopNeedleColor: index as NeedleColor });
     this.notifySettingsChange();
+  };
+
+  private openModePicker = (): void => {
+    this.setState({ openPicker: "mode" });
+  };
+
+  private openAlignmentPicker = (): void => {
+    this.setState({ openPicker: "alignment" });
+  };
+
+  private openStartBedPicker = (): void => {
+    this.setState({ openPicker: "startBed" });
+  };
+
+  private openStopBedPicker = (): void => {
+    this.setState({ openPicker: "stopBed" });
+  };
+
+  private closePicker = (): void => {
+    this.setState({ openPicker: null });
+  };
+
+  /**
+   * Rendered once, as the last child of the top-level settings card, so its
+   * absolute-position overlay paints over every field regardless of which
+   * one triggered it. Rendering a modal inline inside a field's own small
+   * row (the previous approach) scoped its absolute positioning to that row
+   * and its paint order to that row's place in the tree, so later sibling
+   * fields visually covered it.
+   */
+  private getActivePickerConfig(): {
+    title: string;
+    labels: string[];
+    selectedIndex: number;
+    onSelect: (index: number) => void;
+  } | null {
+    switch (this.state.openPicker) {
+      case "mode":
+        return {
+          title: "Mode",
+          labels: Mode.getAllLabels(),
+          selectedIndex: this.state.mode,
+          onSelect: this.handleModeChange,
+        };
+      case "alignment":
+        return {
+          title: "Alignment",
+          labels: Alignment.getAllLabels(),
+          selectedIndex: this.state.alignment,
+          onSelect: this.handleAlignmentChange,
+        };
+      case "startBed":
+        return {
+          title: "Start needle bed",
+          labels: NeedleColor.getAllLabels(),
+          selectedIndex: this.state.startNeedleColor,
+          onSelect: this.handleStartNeedleColorChange,
+        };
+      case "stopBed":
+        return {
+          title: "Stop needle bed",
+          labels: NeedleColor.getAllLabels(),
+          selectedIndex: this.state.stopNeedleColor,
+          onSelect: this.handleStopNeedleColorChange,
+        };
+      default:
+        return null;
+    }
+  }
+
+  private handleActivePickerSelect = (index: number): void => {
+    const config = this.getActivePickerConfig();
+    config?.onSelect(index);
+    this.closePicker();
   };
 
   private handleNumColorsChange = (e: EditTextEvent): void => {
@@ -579,6 +659,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
   onRender(): void {
     const highlighted = this.viewModel.tourHighlighted === true;
     const needleRangeSuggestion = this.getNeedleRangeSuggestion();
+    const activePicker = this.getActivePickerConfig();
     <view
       accessibilityId="checklist-target-needles"
       style={sidebarCardStyle}
@@ -594,7 +675,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           label="Mode"
           index={this.state.mode}
           labels={Mode.getAllLabels()}
-          onChange={this.handleModeChange}
+          onOpenPicker={this.openModePicker}
         />
         <IntegerStepperField
           label="Colors"
@@ -658,7 +739,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           onOffsetChange={this.handleStartNeedleOffsetChange}
           onDecrement={this.handleDecrementStartNeedle}
           onIncrement={this.handleIncrementStartNeedle}
-          onColorChange={this.handleStartNeedleColorChange}
+          onOpenPicker={this.openStartBedPicker}
           decrementId="start-needle-decrement"
           incrementId="start-needle-increment"
         />
@@ -670,7 +751,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           onOffsetChange={this.handleStopNeedleOffsetChange}
           onDecrement={this.handleDecrementStopNeedle}
           onIncrement={this.handleIncrementStopNeedle}
-          onColorChange={this.handleStopNeedleColorChange}
+          onOpenPicker={this.openStopBedPicker}
           decrementId="stop-needle-decrement"
           incrementId="stop-needle-increment"
         />
@@ -678,7 +759,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           label="Alignment"
           index={this.state.alignment}
           labels={Alignment.getAllLabels()}
-          onChange={this.handleAlignmentChange}
+          onOpenPicker={this.openAlignmentPicker}
         />
 
         <ImageSettingsTransformSection
@@ -760,6 +841,16 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           toggleId="knit-side-image-toggle"
         />
       </layout>
+      {activePicker ? (
+        <OptionPickerModal
+          accessibilityId="image-settings-picker-modal"
+          title={activePicker.title}
+          labels={activePicker.labels}
+          selectedIndex={activePicker.selectedIndex}
+          onSelect={this.handleActivePickerSelect}
+          onClose={this.closePicker}
+        />
+      ) : undefined}
     </view>;
   }
 }
