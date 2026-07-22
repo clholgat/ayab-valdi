@@ -6,7 +6,8 @@ import { IComponent } from "valdi_core/src/IComponent";
 import { Preferences } from "app_settings/src/Preferences";
 import { PreferencesProvider } from "app_settings/src/PreferencesProvider";
 import { InMemoryPreferenceStorage } from "app_settings/src/PreferenceStorage";
-import { Alignment } from "constants/src/StateMachineConstants";
+import { Alignment, Mode } from "constants/src/StateMachineConstants";
+import { ActivePickerConfig } from "constants/src/OptionPickerModal";
 import {
   ImageSettingsComponent,
   ImageSettingsViewModel,
@@ -19,6 +20,7 @@ const makeViewModel = (
   hasImage: true,
   repeatH: 1,
   repeatV: 1,
+  onOpenPicker: () => {},
   ...overrides,
 });
 
@@ -171,6 +173,63 @@ describe("ImageSettingsComponent", () => {
       "Match your cast-on",
     );
   });
+
+  valdiIt(
+    "requests the mode picker with the current selection when its trigger is tapped",
+    async (driver) => {
+      const onOpenPicker = jasmine.createSpy("onOpenPicker");
+      const prefs = await makePreferences();
+      const root = renderImageSettings(driver, prefs, makeViewModel({ onOpenPicker }));
+      await tapNodeWithKey(root, "mode-picker");
+      expect(onOpenPicker).toHaveBeenCalledWith(
+        jasmine.objectContaining({
+          title: "Mode",
+          labels: Mode.getAllLabels(),
+          selectedIndex: Mode.SINGLEBED,
+        }),
+      );
+    },
+  );
+
+  valdiIt(
+    "applies the picked mode and notifies onSettingsChange once a picker option is selected",
+    async (driver) => {
+      let capturedConfig: ActivePickerConfig | undefined;
+      const onOpenPicker = jasmine
+        .createSpy("onOpenPicker")
+        .and.callFake((config: ActivePickerConfig) => {
+          capturedConfig = config;
+        });
+      const onSettingsChange = jasmine.createSpy("onSettingsChange");
+      const prefs = await makePreferences();
+      const root = renderImageSettings(
+        driver,
+        prefs,
+        makeViewModel({ onOpenPicker, onSettingsChange }),
+      );
+      await tapNodeWithKey(root, "mode-picker");
+      onSettingsChange.calls.reset();
+
+      capturedConfig!.onSelect(Mode.CLASSIC_RIBBER);
+
+      expect(onSettingsChange).toHaveBeenCalledWith(
+        jasmine.objectContaining({ mode: Mode.CLASSIC_RIBBER }),
+      );
+    },
+  );
+
+  valdiIt(
+    "requests the start-bed picker with the current selection when its trigger is tapped",
+    async (driver) => {
+      const onOpenPicker = jasmine.createSpy("onOpenPicker");
+      const prefs = await makePreferences();
+      const root = renderImageSettings(driver, prefs, makeViewModel({ onOpenPicker }));
+      await tapNodeWithKey(root, "start-bed-picker");
+      expect(onOpenPicker).toHaveBeenCalledWith(
+        jasmine.objectContaining({ title: "Start needle bed" }),
+      );
+    },
+  );
 
   valdiIt(
     "picks up preference resets while mounted instead of showing stale values",

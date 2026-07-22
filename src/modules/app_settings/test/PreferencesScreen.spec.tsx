@@ -118,18 +118,60 @@ describe("PreferencesScreen", () => {
     expect(prefs.machine).toBe(Machine.KH270);
   });
 
-  valdiIt("updates machine preference from settings picker", async (driver) => {
-    const onMachineChange = jasmine.createSpy("onMachineChange");
-    const prefs = await makePreferences();
-    const root = renderPreferencesScreen(
-      driver,
-      prefs,
-      makeViewModel({ onMachineChange }),
-    );
-    expect(prefs.machine).toBe(Machine.KH910_KH950);
-    // Machine picker is the first IndexPicker in settings (before aspect ratio).
-    expect(onMachineChange).not.toHaveBeenCalled();
-    expect(prefs.machine).toBeDefined();
-    expect(findNodeWithKey(root, "checklist-target-machine")[0]).toBeDefined();
-  });
+  valdiIt(
+    "updates the machine preference by opening the picker and selecting an option",
+    async (driver) => {
+      const onMachineChange = jasmine.createSpy("onMachineChange");
+      const prefs = await makePreferences();
+      const root = renderPreferencesScreen(
+        driver,
+        prefs,
+        makeViewModel({ onMachineChange }),
+      );
+      expect(prefs.machine).toBe(Machine.KH910_KH950);
+
+      await tapNodeWithKey(root, "machine-picker");
+      expect(findNodeWithKey(root, "preferences-picker-modal")[0]).toBeDefined();
+
+      await tapNodeWithKey(root, "preferences-picker-modal-option-2");
+
+      expect(prefs.machine).toBe(Machine.KH270);
+      expect(onMachineChange).toHaveBeenCalled();
+      expect(findNodeWithKey(root, "preferences-picker-modal").length).toBe(0);
+    },
+  );
+
+  valdiIt(
+    "closes the picker modal without changing the selection when Cancel is tapped",
+    async (driver) => {
+      const onMachineChange = jasmine.createSpy("onMachineChange");
+      const prefs = await makePreferences();
+      const root = renderPreferencesScreen(
+        driver,
+        prefs,
+        makeViewModel({ onMachineChange }),
+      );
+
+      await tapNodeWithKey(root, "machine-picker");
+      await tapNodeWithKey(root, "preferences-picker-modal-cancel");
+
+      expect(prefs.machine).toBe(Machine.KH910_KH950);
+      expect(onMachineChange).not.toHaveBeenCalled();
+      expect(findNodeWithKey(root, "preferences-picker-modal").length).toBe(0);
+    },
+  );
+
+  valdiIt(
+    "updates the aspect ratio preference by opening the picker and selecting an option",
+    async (driver) => {
+      const prefs = await makePreferences();
+      const root = renderPreferencesScreen(driver, prefs, makeViewModel());
+
+      await tapNodeWithKey(root, "aspect-ratio-picker");
+      await tapNodeWithKey(root, "preferences-picker-modal-option-0");
+
+      expect(prefs.aspectRatio).toBe(0);
+      expect(findNodeWithKey(root, "preferences-picker-modal").length).toBe(0);
+    },
+  );
 });

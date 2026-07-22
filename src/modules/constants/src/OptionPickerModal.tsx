@@ -1,18 +1,23 @@
 import { StatefulComponent } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
 import { Label, Layout, ScrollView, View } from "valdi_tsx/src/NativeTemplateElements";
-import { sansFont, BUTTON_FONT_SMALL } from "constants/src/Typography";
-import { TEXT_PRIMARY } from "constants/src/UiTheme";
-import {
-  SIDEBAR_CARD_BACKGROUND,
-  SIDEBAR_CARD_BORDER,
-} from "constants/src/SidebarStyles";
-import { ModalCloseButton } from "constants/src/ModalCloseButton";
+import { sansFont, BUTTON_FONT_SMALL } from "./Typography";
+import { TEXT_PRIMARY } from "./UiTheme";
+import { SIDEBAR_CARD_BACKGROUND, SIDEBAR_CARD_BORDER } from "./SidebarStyles";
+import { ModalCloseButton } from "./ModalCloseButton";
 import {
   CoreButton,
   CoreButtonColoring,
   CoreButtonSizing,
 } from "widgets/src/components/button/CoreButton";
+
+/** Shape of a currently-open picker: what to show and where selection goes. */
+export interface ActivePickerConfig {
+  title: string;
+  labels: string[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+}
 
 /** Tap-to-open modal replacement for the native drum-roll IndexPicker widget. */
 export interface OptionPickerModalViewModel {
@@ -104,6 +109,7 @@ export class OptionPickerModal extends StatefulComponent<
           <layout style={styles.footerRow}>
             <CoreButton
               accessibilityId={`${vm.accessibilityId}-cancel`}
+              key={`${vm.accessibilityId}-cancel`}
               text="Cancel"
               onTap={vm.onClose}
               coloring={CoreButtonColoring.SECONDARY}

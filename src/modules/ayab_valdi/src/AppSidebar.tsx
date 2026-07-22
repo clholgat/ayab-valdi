@@ -1,8 +1,12 @@
-import { Component } from "valdi_core/src/Component";
+import { StatefulComponent } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
 import { Label, Layout, ScrollView, View } from "valdi_tsx/src/NativeTemplateElements";
 import { ImageSettings, ImageSettingsComponent } from "image_settings/src/ImageSettingsComponent";
 import { BUTTON_FONT_SMALL } from "constants/src/Typography";
+import {
+  ActivePickerConfig,
+  OptionPickerModal,
+} from "constants/src/OptionPickerModal";
 import {
   CoreButton,
   CoreButtonColoring,
@@ -63,7 +67,36 @@ export interface AppSidebarViewModel {
   onCancel: () => void;
 }
 
-export class AppSidebar extends Component<AppSidebarViewModel> {
+interface AppSidebarState {
+  openPicker: ActivePickerConfig | null;
+}
+
+export class AppSidebar extends StatefulComponent<
+  AppSidebarViewModel,
+  AppSidebarState
+> {
+  state: AppSidebarState = { openPicker: null };
+
+  /**
+   * Owned here (rather than by ImageSettingsComponent, which triggers it)
+   * so the modal renders as a sibling of the sidebar's own `<scroll>`
+   * instead of a descendant. An absolute-position overlay nested inside a
+   * scroll container sizes and centers itself against that scroll's own
+   * (possibly-scrolled) content box, not the visible sidebar column.
+   */
+  private handleOpenPicker = (config: ActivePickerConfig): void => {
+    this.setState({ openPicker: config });
+  };
+
+  private closePicker = (): void => {
+    this.setState({ openPicker: null });
+  };
+
+  private handlePickerSelect = (index: number): void => {
+    this.state.openPicker?.onSelect(index);
+    this.closePicker();
+  };
+
   onRender(): void {
     const vm = this.viewModel;
     const machineIo = vm.enableMachineIo !== false;
@@ -75,7 +108,7 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
 
     <layout style={vm.fillWidth ? styles.rightPanelFill : styles.rightPanel}>
       {this.renderCloseRow()}
-      <scroll style={styles.sidebarScroll}>
+      <scroll accessibilityId="sidebar-scroll" key="sidebar-scroll" style={styles.sidebarScroll}>
         <layout style={styles.sidebarScrollInner}>
           <layout style={styles.settingsButtonRow}>
             <CoreButton
@@ -121,6 +154,7 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
             onFlipV={vm.onFlipV}
             onRotate={vm.onRotate}
             onInvert={vm.onInvert}
+            onOpenPicker={this.handleOpenPicker}
           />
           <InlineTourBubble
             targetId="checklist-target-needles"
@@ -129,6 +163,16 @@ export class AppSidebar extends Component<AppSidebarViewModel> {
         </layout>
       </scroll>
       {this.renderKnitFooter(machineIo, showActionBanner)}
+      {this.state.openPicker ? (
+        <OptionPickerModal
+          accessibilityId="sidebar-picker-modal"
+          title={this.state.openPicker.title}
+          labels={this.state.openPicker.labels}
+          selectedIndex={this.state.openPicker.selectedIndex}
+          onSelect={this.handlePickerSelect}
+          onClose={this.closePicker}
+        />
+      ) : undefined}
     </layout>;
   }
 

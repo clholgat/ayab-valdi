@@ -20,7 +20,7 @@ import {
   SettingsSectionTitle,
   ToggleField,
 } from "./ImageSettingsFieldControls";
-import { OptionPickerModal } from "./OptionPickerModal";
+import { ActivePickerConfig } from "constants/src/OptionPickerModal";
 import { ImageSettingsTransformSection } from "./ImageSettingsTransformSection";
 import { HelpHint } from "constants/src/HelpHint";
 import { COLOR_SYMBOLS } from "constants/src/KnittingConstants";
@@ -76,6 +76,15 @@ export interface ImageSettingsViewModel {
   onRotate?: () => void;
   onInvert?: () => void;
   tourHighlighted?: boolean;
+  /**
+   * Requests that the host show a picker modal for one of this panel's
+   * fields. The host (not this panel) owns the modal so it can render as a
+   * sibling of the panel's own scroll container instead of a descendant —
+   * an absolute-position overlay nested inside a `<scroll>` sizes and
+   * positions itself against that scroll's own (possibly-scrolled) content
+   * box, not the visible viewport.
+   */
+  onOpenPicker: (config: ActivePickerConfig) => void;
 }
 
 interface ImageSettingsInnerViewModel
@@ -91,9 +100,6 @@ export interface ImageSettings {
   alignment: Alignment;
   autoMirror: boolean;
 }
-
-/** Which (if any) of the field OptionPickerModals is currently open. */
-type PickerKind = "mode" | "alignment" | "startBed" | "stopBed";
 
 interface State {
   mode: Mode;
@@ -114,7 +120,6 @@ interface State {
   repeatVText: string;
   stretchHText: string;
   stretchVText: string;
-  openPicker: PickerKind | null;
 }
 
 export class ImageSettingsComponentInner extends StatefulComponent<
@@ -140,7 +145,6 @@ export class ImageSettingsComponentInner extends StatefulComponent<
     repeatVText: "1",
     stretchHText: "1",
     stretchVText: "1",
-    openPicker: null,
   };
 
   private unsubscribePreferences?: () => void;
@@ -313,77 +317,39 @@ export class ImageSettingsComponentInner extends StatefulComponent<
   };
 
   private openModePicker = (): void => {
-    this.setState({ openPicker: "mode" });
+    this.viewModel.onOpenPicker({
+      title: "Mode",
+      labels: Mode.getAllLabels(),
+      selectedIndex: this.state.mode,
+      onSelect: this.handleModeChange,
+    });
   };
 
   private openAlignmentPicker = (): void => {
-    this.setState({ openPicker: "alignment" });
+    this.viewModel.onOpenPicker({
+      title: "Alignment",
+      labels: Alignment.getAllLabels(),
+      selectedIndex: this.state.alignment,
+      onSelect: this.handleAlignmentChange,
+    });
   };
 
   private openStartBedPicker = (): void => {
-    this.setState({ openPicker: "startBed" });
+    this.viewModel.onOpenPicker({
+      title: "Start needle bed",
+      labels: NeedleColor.getAllLabels(),
+      selectedIndex: this.state.startNeedleColor,
+      onSelect: this.handleStartNeedleColorChange,
+    });
   };
 
   private openStopBedPicker = (): void => {
-    this.setState({ openPicker: "stopBed" });
-  };
-
-  private closePicker = (): void => {
-    this.setState({ openPicker: null });
-  };
-
-  /**
-   * Rendered once, as the last child of the top-level settings card, so its
-   * absolute-position overlay paints over every field regardless of which
-   * one triggered it. Rendering a modal inline inside a field's own small
-   * row (the previous approach) scoped its absolute positioning to that row
-   * and its paint order to that row's place in the tree, so later sibling
-   * fields visually covered it.
-   */
-  private getActivePickerConfig(): {
-    title: string;
-    labels: string[];
-    selectedIndex: number;
-    onSelect: (index: number) => void;
-  } | null {
-    switch (this.state.openPicker) {
-      case "mode":
-        return {
-          title: "Mode",
-          labels: Mode.getAllLabels(),
-          selectedIndex: this.state.mode,
-          onSelect: this.handleModeChange,
-        };
-      case "alignment":
-        return {
-          title: "Alignment",
-          labels: Alignment.getAllLabels(),
-          selectedIndex: this.state.alignment,
-          onSelect: this.handleAlignmentChange,
-        };
-      case "startBed":
-        return {
-          title: "Start needle bed",
-          labels: NeedleColor.getAllLabels(),
-          selectedIndex: this.state.startNeedleColor,
-          onSelect: this.handleStartNeedleColorChange,
-        };
-      case "stopBed":
-        return {
-          title: "Stop needle bed",
-          labels: NeedleColor.getAllLabels(),
-          selectedIndex: this.state.stopNeedleColor,
-          onSelect: this.handleStopNeedleColorChange,
-        };
-      default:
-        return null;
-    }
-  }
-
-  private handleActivePickerSelect = (index: number): void => {
-    const config = this.getActivePickerConfig();
-    config?.onSelect(index);
-    this.closePicker();
+    this.viewModel.onOpenPicker({
+      title: "Stop needle bed",
+      labels: NeedleColor.getAllLabels(),
+      selectedIndex: this.state.stopNeedleColor,
+      onSelect: this.handleStopNeedleColorChange,
+    });
   };
 
   private handleNumColorsChange = (e: EditTextEvent): void => {
@@ -660,7 +626,6 @@ export class ImageSettingsComponentInner extends StatefulComponent<
   onRender(): void {
     const highlighted = this.viewModel.tourHighlighted === true;
     const needleRangeSuggestion = this.getNeedleRangeSuggestion();
-    const activePicker = this.getActivePickerConfig();
     <view
       accessibilityId="checklist-target-needles"
       style={sidebarCardStyle}
@@ -842,16 +807,6 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           toggleId="knit-side-image-toggle"
         />
       </layout>
-      {activePicker ? (
-        <OptionPickerModal
-          accessibilityId="image-settings-picker-modal"
-          title={activePicker.title}
-          labels={activePicker.labels}
-          selectedIndex={activePicker.selectedIndex}
-          onSelect={this.handleActivePickerSelect}
-          onClose={this.closePicker}
-        />
-      ) : undefined}
     </view>;
   }
 }
