@@ -10,6 +10,7 @@ import { simulationKnitSpec } from "./specs/simulation-knit.mjs";
 import { hardwareTestSpec } from "./specs/hardware-test.mjs";
 import { loadImageSpec } from "./specs/load-image.mjs";
 import { settingsSpec } from "./specs/settings.mjs";
+import { firstRunTourSpec } from "./specs/first-run-tour.mjs";
 import { previewTransformsSpec } from "./specs/preview-transforms.mjs";
 import { progressStitchSpec } from "./specs/progress-stitch.mjs";
 import { loadPatSpec } from "./specs/load-pat.mjs";
@@ -33,6 +34,7 @@ const allSpecs = [
   { name: "simulation-knit", fn: simulationKnitSpec },
   { name: "hardware-test", fn: hardwareTestSpec },
   { name: "settings", fn: settingsSpec },
+  { name: "first-run-tour", fn: firstRunTourSpec },
   { name: "preview-transforms", fn: previewTransformsSpec },
   { name: "progress-stitch", fn: progressStitchSpec },
   { name: "knit-cancel-restart", fn: knitCancelRestartSimulationSpec },
