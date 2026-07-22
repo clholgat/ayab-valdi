@@ -129,9 +129,9 @@ describe("ImageSettingsComponent", () => {
       prefs,
       makeViewModel({ palette: [0x000000, 0xff0000, 0xffffff] }),
     );
-    expect(getLabelValue(root, "color-legend-label-0")).toBe("Color 1");
-    expect(getLabelValue(root, "color-legend-label-1")).toBe("Color 2");
-    expect(getLabelValue(root, "color-legend-label-2")).toBe("Color 3");
+    expect(getLabelValue(root, "color-legend-label-0")).toBe("Color A");
+    expect(getLabelValue(root, "color-legend-label-1")).toBe("Color B");
+    expect(getLabelValue(root, "color-legend-label-2")).toBe("Color C");
     expect(findNodeWithKey(root, "color-legend-swatch-2").length).toBe(1);
     expect(findNodeWithKey(root, "color-legend-label-3").length).toBe(0);
   });

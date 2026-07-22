@@ -23,6 +23,7 @@ import {
 import { OptionPickerModal } from "./OptionPickerModal";
 import { ImageSettingsTransformSection } from "./ImageSettingsTransformSection";
 import { HelpHint } from "constants/src/HelpHint";
+import { COLOR_SYMBOLS } from "constants/src/KnittingConstants";
 import { KNIT_SIDE_IMAGE_HINT } from "preview/src/KnitSidePreviewLogic";
 import { Mode, Alignment } from "constants/src/StateMachineConstants";
 import { NeedleColor } from "./Types";
@@ -700,7 +701,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
                 key={`color-legend-label-${index}`}
                 accessibilityId={`color-legend-label-${index}`}
                 style={styles.colorLegendLabel}
-                value={`Color ${index + 1}`}
+                value={`Color ${COLOR_SYMBOLS[index] ?? index + 1}`}
               />
             </layout>
           ))}
