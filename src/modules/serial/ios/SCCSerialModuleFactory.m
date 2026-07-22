@@ -1,5 +1,6 @@
 #import "valdi_core/SCValdiModuleFactoryRegistry.h"
 #import <SerialTypes/SerialTypes.h>
+#import <valdi_core/SCValdiPromise.h>
 #import <Foundation/Foundation.h>
 
 @interface SCCSerialModule: NSObject<SerialNativeModule>
@@ -71,6 +72,41 @@ NSString *const SCCSerialNotSupportedReason =
 - (NSString*)prompt_websocket_url
 {
     return nil;
+}
+
+- (NSArray<NSString*>*)get_serial_ports
+{
+    // Nothing can ever be opened on iOS — no ports to list.
+    return @[];
+}
+
+- (SCValdiPromise<NSString*>*)request_serial_port
+{
+    return [SCValdiPromise resolvedPromiseWithValue:nil];
+}
+
+- (SCValdiPromise<NSArray<NSString*>*>*)refresh_serial_ports
+{
+    return [SCValdiPromise resolvedPromiseWithValue:@[]];
+}
+
+- (NSArray*)browse_ayab_mdns
+{
+    // mDNS discovery of network-connected controllers is implemented on
+    // macOS only; other platforms (including iOS) return no records.
+    return @[];
+}
+
+- (void (^)(void))registerDataAvailableResolverWithResolver:(void (^)(void))resolver
+{
+    // Never invoked — no connection ever succeeds on iOS, so no data ever
+    // arrives to resolve. Return a no-op unregister function.
+    return ^{};
+}
+
+- (void)consumeReadBufferWithBytesToConsume:(double)bytesToConsume
+{
+    // Nothing is ever buffered on iOS — no-op.
 }
 
 @end
