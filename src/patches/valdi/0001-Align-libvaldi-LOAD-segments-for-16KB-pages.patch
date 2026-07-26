@@ -1,0 +1,13 @@
+Link Android shared libs with 16 KB max-page-size so LOAD segments satisfy
+Android 15+'s 16 KB page-size requirement (Snapchat/Valdi#94); Google Play
+mandates this for Android 15+ targets since 2025-11-01.
+--- a/valdi/valdi.bzl
++++ b/valdi/valdi.bzl
+@@ -50,6 +50,7 @@
+             "-fuse-ld=lld",
+             "--no-undefined",
+             "-landroid",
++            "-Wl,-z,max-page-size=16384",
+             "-ldl",
+             "-llog",
+             "-lm",
