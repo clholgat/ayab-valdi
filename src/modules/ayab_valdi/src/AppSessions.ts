@@ -1,12 +1,17 @@
 import { ImageSettings } from "image_settings/src/ImageSettingsComponent";
 import { Preferences } from "app_settings/src/Preferences";
 import { Token } from "constants/src/SerialConstants";
+import {
+  Stk500FlashSession,
+  Stk500FlashResult,
+} from "serial/src/firmware/Stk500FlashSession";
 import { KnitSession } from "./KnitSession";
 import { HardwareTestSession } from "./HardwareTestSession";
 import { FeedbackMessage } from "./Feedback";
 import { ValueNotifier } from "./ValueNotifier";
 import { AudioFeedbackSink } from "./AudioFeedback";
 import { getMissingImageKnitMessage } from "./AppUiState";
+import { SIMULATION_PORT } from "./SerialPortList";
 
 export const KNIT_FINISHED_MESSAGE: FeedbackMessage = {
   text: "Pattern completed",
@@ -199,6 +204,69 @@ export function sendAppHardwareTestCommand(
   session?.sendCommand(token, payload);
   const label = Token[token]?.toString().replace(/Cmd$/, "") ?? "cmd";
   logNotifier.update((log) => `${log}\n> ${label}\n`);
+}
+
+export interface RunAppFlashFirmwareParams {
+  isKnitting: boolean;
+  isHardwareTesting: boolean;
+  isFlashing: boolean;
+  serialPort?: string;
+}
+
+export interface RunAppFlashFirmwareCallbacks {
+  onSessionStarted: (session: Stk500FlashSession) => void;
+  onProgress: (bytesWritten: number, totalBytes: number) => void;
+  onOutput: (text: string) => void;
+  onFinished: (result: Stk500FlashResult) => void;
+  isDestroyed: () => boolean;
+}
+
+export async function runAppFlashFirmware(
+  params: RunAppFlashFirmwareParams,
+  callbacks: RunAppFlashFirmwareCallbacks,
+): Promise<void> {
+  if (
+    params.isKnitting ||
+    params.isHardwareTesting ||
+    params.isFlashing ||
+    !params.serialPort ||
+    params.serialPort === SIMULATION_PORT
+  ) {
+    return;
+  }
+
+  const session = Stk500FlashSession.start({ serialPort: params.serialPort });
+  callbacks.onSessionStarted(session);
+
+  const result = await session.run({
+    onProgress: callbacks.onProgress,
+    onOutput: callbacks.onOutput,
+    isDestroyed: callbacks.isDestroyed,
+  });
+
+  if (!callbacks.isDestroyed()) {
+    callbacks.onFinished(result);
+  }
+}
+
+export function resetFlashFirmwareNotifiers(
+  progressNotifier: ValueNotifier<number>,
+  logNotifier: ValueNotifier<string>,
+  doneNotifier: ValueNotifier<boolean>,
+): void {
+  progressNotifier.set(0);
+  logNotifier.set("");
+  doneNotifier.set(false);
+}
+
+export function closeAppFlashFirmware(
+  session: Stk500FlashSession | undefined,
+  progressNotifier: ValueNotifier<number>,
+  logNotifier: ValueNotifier<string>,
+  doneNotifier: ValueNotifier<boolean>,
+): void {
+  session?.cancel();
+  resetFlashFirmwareNotifiers(progressNotifier, logNotifier, doneNotifier);
 }
 
 function scheduleNextFrame(): Promise<void> {

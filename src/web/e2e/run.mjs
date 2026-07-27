@@ -19,7 +19,9 @@ import {
   knitCancelRestartWebSerialSpec,
 } from "./specs/knit-cancel-restart.mjs";
 import { knitNaturalCompletionSpec } from "./specs/knit-natural-completion.mjs";
+import { flashFirmwareSpec } from "./specs/flash-firmware.mjs";
 import { startAyabWsServer } from "./helpers/ayabWsServer.mjs";
+import { startStk500WsServer } from "./helpers/stk500WsServer.mjs";
 
 const webDir = new URL("..", import.meta.url).pathname;
 
@@ -40,6 +42,7 @@ const allSpecs = [
   { name: "knit-cancel-restart", fn: knitCancelRestartSimulationSpec },
   { name: "knit-cancel-restart-ws", fn: knitCancelRestartWebSerialSpec },
   { name: "knit-natural-completion", fn: knitNaturalCompletionSpec },
+  { name: "flash-firmware", fn: flashFirmwareSpec },
 ];
 
 // E2E_ONLY=comma,separated,names to run a subset while iterating locally.
@@ -67,6 +70,13 @@ async function runSpec(spec) {
   try {
     if (spec.name === "knit-cancel-restart-ws") {
       wsServer = await startAyabWsServer();
+      await page.evaluateOnNewDocument((wsUrl) => {
+        window.__E2E_WEBSOCKET_URI__ = wsUrl;
+      }, wsServer.url);
+      ctx.wsUrl = wsServer.url;
+    }
+    if (spec.name === "flash-firmware") {
+      wsServer = await startStk500WsServer();
       await page.evaluateOnNewDocument((wsUrl) => {
         window.__E2E_WEBSOCKET_URI__ = wsUrl;
       }, wsServer.url);

@@ -56,3 +56,12 @@ export declare function prompt_websocket_url(): string | null;
 export declare function registerDataAvailableResolver(
   resolver: () => void,
 ): () => void;
+
+// Web only. Re-pulses DTR/RTS on the already-open port to reset the connected
+// Arduino into its bootloader, without open_serial()'s ~2s post-reset settle
+// delay (that delay is tuned for the normal AYAB-firmware connect path, which
+// needs the shield fully booted - the opposite of what a bootloader flash
+// needs). Used by Stk500FlashSession right before syncing, so it can catch
+// Optiboot's short (~0.5-1s) post-reset sync window instead of missing it.
+// On native: not implemented (not needed - firmware flashing is web only).
+export declare function pulse_dtr_rts_reset(): Promise<void>;

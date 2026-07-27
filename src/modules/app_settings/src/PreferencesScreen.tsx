@@ -43,9 +43,12 @@ export interface PreferencesScreenViewModel {
   onMachineChange?: () => void;
   onChange?: () => void;
   onHardwareTest?: () => void;
+  onFlashFirmware?: () => void;
   onRestartTour?: () => void;
   hardwareTestDisabled?: boolean;
   isHardwareTesting?: boolean;
+  flashFirmwareDisabled?: boolean;
+  isFlashing?: boolean;
   restartTourDisabled?: boolean;
   machineTourHighlighted?: boolean;
 }
@@ -145,6 +148,10 @@ class PreferencesScreenInner extends StatefulComponent<
 
   private handleHardwareTest = (): void => {
     this.viewModel.onHardwareTest?.();
+  };
+
+  private handleFlashFirmware = (): void => {
+    this.viewModel.onFlashFirmware?.();
   };
 
   private handleRestartTour = (): void => {
@@ -323,6 +330,18 @@ class PreferencesScreenInner extends StatefulComponent<
             sizing={CoreButtonSizing.SMALL}
             font={BUTTON_FONT_SMALL}
             disabled={this.viewModel.hardwareTestDisabled}
+            width="100%"
+          />
+        </layout>
+        <layout style={styles.buttonSlot}>
+          <CoreButton
+            accessibilityId="flash-firmware-button"
+            text={this.viewModel.isFlashing ? "Flashing..." : "Flash Firmware"}
+            onTap={this.handleFlashFirmware}
+            coloring={CoreButtonColoring.SECONDARY}
+            sizing={CoreButtonSizing.SMALL}
+            font={BUTTON_FONT_SMALL}
+            disabled={this.viewModel.flashFirmwareDisabled}
             width="100%"
           />
         </layout>

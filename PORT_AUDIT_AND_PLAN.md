@@ -34,9 +34,10 @@ This document compares **ayab-valdi** to **ayab-desktop**. Updated **2026-07** t
 | **Preview** | ✅ | `Preview`, `ZoomablePreviewViewport`, bed + needles |
 | **Row progress overlay** | ✅ | `PreviewSceneLayout` |
 | **Knit progress** | ✅ | `ProgressAndStatus`, `KnitProgressRow`, stitch selection |
-| **User feedback** | ✅ | `Feedback`, `UserMessage`, wrong-API → ayab-desktop guidance |
+| **User feedback** | ✅ | `Feedback`, `UserMessage`, wrong-API → in-app flash (web) / ayab-desktop |
 | **About** | ✅ | `AboutScreen` in `app_settings` |
 | **Hardware test** | ✅ | `HardwareTestSession`, `HardwareTestModal` |
+| **Firmware flash (web)** | ✅ | `Stk500FlashSession`, `FlashFirmwareModal`; Web Serial + STK500v1, Arduino Uno only |
 | **Audio** | ✅ Partial | Web audio via `PlatformAudioFeedback`; `quietMode` |
 
 ### Architecture & quality
@@ -66,7 +67,6 @@ cd src/web && npm run e2e
 | **Reflect / mirror dialog** | Won't implement; stretch + flip cover common cases |
 | **Rotate right in UI** | Won't wire; `rotateLeft` is enough (`rotateRight` exists in logic only) |
 | **Empty initial preview (no checkerboard)** | Deferred — keep default checkerboard for now |
-| **In-app firmware flash** | Deferred forever for this port; wrong-API message points at ayab-desktop |
 | **i18n** | Deferred; English-only |
 
 ### Optional remaining work
@@ -74,6 +74,7 @@ cd src/web && npm run e2e
 | Item | Notes |
 |------|--------|
 | **mDNS on Android / iOS** | macOS Bonjour only; web/Linux use manual `ws://` |
+| **In-app firmware flash on native platforms** | Web-only for now (Web Serial + STK500v1); native (Android/macOS/Linux) still points to ayab-desktop |
 | **`.cut` golden tests** | ✅ `CutPatternConverter.golden.spec.ts` (greyscale + `.pal`) |
 | **Fullscreen Knit mode** | See `UX_RECOMMENDATIONS.md` |
 | **Recent files / export** | Not implemented |
@@ -96,10 +97,11 @@ cd src/web && npm run e2e
 | — | Phase 1–3 core parity + UX | ✅ Done |
 | — | mDNS (macOS), `.stp` goldens, stretch | ✅ Done |
 | — | Wrong-API firmware recovery copy | ✅ Done |
+| — | In-app Uno firmware flash (Web Serial + STK500v1) | ✅ Done |
 | **Next** | Commit / push / CI verify / public | Open |
 | **Later** | Empty preview (drop checkerboard) | Deferred |
-| **Optional** | Knit mode, recent files, Android mDNS | Open |
-| **Won't do** | Reflect, rotate-right UI, in-app firmware flash, i18n | — |
+| **Optional** | Knit mode, recent files, Android mDNS, native firmware flash | Open |
+| **Won't do** | Reflect, rotate-right UI, i18n | — |
 
 ---
 
@@ -111,7 +113,7 @@ cd src/web && npm run e2e
 | mDNS / auto WebSocket | ✅ | ✅ Partial | Bonjour on macOS; manual URL elsewhere |
 | Simulation | ✅ | ✅ | |
 | Knit + cancel | ✅ | ✅ | |
-| Validation + UI errors | ✅ | ✅ | Includes wrong-API → ayab-desktop |
+| Validation + UI errors | ✅ | ✅ | Includes wrong-API → in-app flash (web) / ayab-desktop |
 | Preferences | ✅ | ✅ | |
 | Progress / knit table | ✅ | ✅ | + action banner |
 | First-run guidance | ✅ | ✅ | Tour overlay |
@@ -120,7 +122,7 @@ cd src/web && npm run e2e
 | About / version | ✅ | ✅ | |
 | HW test UI | ✅ | ✅ | |
 | Audio | ✅ | Partial | Web |
-| Firmware flash | ✅ | ❌ | Documented recovery only |
+| Firmware flash | ✅ | ✅ (web only) | In-app Web Serial + STK500v1 flash for Arduino Uno; other platforms still point to ayab-desktop |
 | i18n | ✅ | ❌ | Deferred |
 | Tests + CI + E2E | ✅ | ✅ | Verify on GitHub after push |
 

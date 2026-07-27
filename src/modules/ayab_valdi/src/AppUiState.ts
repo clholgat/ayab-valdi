@@ -3,12 +3,14 @@ import { ImageSettings } from "image_settings/src/ImageSettingsComponent";
 export function isKnitButtonDisabled(state: {
   isKnitting: boolean;
   isHardwareTesting: boolean;
+  isFlashing?: boolean;
   currentImageSettings?: ImageSettings;
   imageBits?: Uint8Array[][];
 }): boolean {
   return (
     state.isKnitting ||
     state.isHardwareTesting ||
+    state.isFlashing === true ||
     !state.currentImageSettings ||
     !state.imageBits
   );
@@ -28,6 +30,7 @@ export function getMissingImageKnitMessage(state: {
 export function getKnitDisabledReason(state: {
   isKnitting: boolean;
   isHardwareTesting: boolean;
+  isFlashing?: boolean;
   currentImageSettings?: ImageSettings;
   imageBits?: Uint8Array[][];
   imageWidth?: number;
@@ -38,6 +41,9 @@ export function getKnitDisabledReason(state: {
   }
   if (state.isHardwareTesting) {
     return "Finish the hardware test before knitting.";
+  }
+  if (state.isFlashing) {
+    return "Finish flashing firmware before knitting.";
   }
   const missingImage = getMissingImageKnitMessage(state);
   if (missingImage) {

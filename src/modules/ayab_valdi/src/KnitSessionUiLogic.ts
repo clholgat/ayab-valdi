@@ -4,6 +4,7 @@ export interface KnitActionBannerContent {
   title: string;
   subtitle?: string;
   level: FeedbackLevel;
+  actionLabel?: string;
 }
 
 const TRANSMISSION_FINISHED_PREFIX =
@@ -73,9 +74,11 @@ export function getKnitActionBannerContent(
     return {
       title: "Update AYAB firmware",
       subtitle:
-        "This app cannot flash firmware. Use ayab-desktop → Tools → " +
-        "Load AYAB firmware, then reconnect and try Knit again.",
+        "On web, use Settings → Flash Firmware to update it in-app. On " +
+        "other platforms, use ayab-desktop → Tools → Load AYAB firmware. " +
+        "Then reconnect and try Knit again.",
       level: "blocking",
+      actionLabel: "Flash firmware",
     };
   }
 

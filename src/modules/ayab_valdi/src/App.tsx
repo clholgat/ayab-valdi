@@ -11,11 +11,15 @@ import { PreferencesProvider } from "app_settings/src/PreferencesProvider";
 import { Machine } from "state_machine/src/Machine";
 import { KnitSession } from "./KnitSession";
 import { HardwareTestSession } from "./HardwareTestSession";
+import { Stk500FlashSession } from "serial/src/firmware/Stk500FlashSession";
+import { request_serial_port } from "serial/src/Serial";
 import { Token } from "constants/src/SerialConstants";
 import { FeedbackMessage } from "./Feedback";
 import { shouldShowKnitActionBanner } from "./KnitSessionUiLogic";
 import { SettingsModal } from "./SettingsModal";
 import { HardwareTestModal } from "./HardwareTestModal";
+import { FlashFirmwareModal } from "./FlashFirmwareModal";
+import { SIMULATION_PORT } from "./SerialPortList";
 import {
   getKnitDisabledReason,
   isKnitButtonDisabled,
@@ -51,9 +55,12 @@ import {
 } from "./FirstRunTour";
 import {
   closeAppHardwareTest,
+  closeAppFlashFirmware,
   KNIT_FINISHED_MESSAGE,
   resetHardwareTestNotifiers,
+  resetFlashFirmwareNotifiers,
   runAppHardwareTest,
+  runAppFlashFirmware,
   runAppKnit,
   sendAppHardwareTestCommand,
   awaitActiveKnitRun,
@@ -111,6 +118,8 @@ interface State {
   showPreferences: boolean;
   isHardwareTesting: boolean;
   hwTestSession?: HardwareTestSession;
+  isFlashing: boolean;
+  flashSession?: Stk500FlashSession;
   firstRunTourStep: number | null;
   /**
    * Narrow-viewport mode: the sidebar moves into a slide-over drawer.
@@ -133,6 +142,9 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   private readonly knitStatusNotifier = new ValueNotifier(0);
   private readonly hwTestLogNotifier = new ValueNotifier("");
   private readonly hwTestReadyNotifier = new ValueNotifier(false);
+  private readonly flashProgressNotifier = new ValueNotifier(0);
+  private readonly flashLogNotifier = new ValueNotifier("");
+  private readonly flashDoneNotifier = new ValueNotifier(false);
   private readonly imageHandlers = createAppImageHandlers(() => ({
     sourceImageBits: this.state.sourceImageBits,
     stretchH: this.state.stretchH,
@@ -174,6 +186,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     repeatV: 1,
     showPreferences: false,
     isHardwareTesting: false,
+    isFlashing: false,
     firstRunTourStep: null,
     sidebarDrawerOpen: false,
   };
@@ -232,6 +245,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     this.unsubscribePreferences?.();
     this.state.knitSession?.cancel();
     this.state.hwTestSession?.cancel();
+    this.state.flashSession?.cancel();
   }
 
   onViewModelUpdate(previous?: AppViewModel): void {
@@ -395,6 +409,52 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     void this.startHardwareTest();
   };
 
+  private handleFlashFirmwareClose = (): void => {
+    closeAppFlashFirmware(
+      this.state.flashSession,
+      this.flashProgressNotifier,
+      this.flashLogNotifier,
+      this.flashDoneNotifier,
+    );
+    this.setState({
+      isFlashing: false,
+      flashSession: undefined,
+    });
+  };
+
+  private handleFlashFirmwareFromSettings = (): void => {
+    void this.startFlashFirmwareFlow();
+  };
+
+  /**
+   * Flashing needs a real (non-Simulation) port. Rather than requiring one to
+   * already be selected in the sidebar, prompt for a device right here if
+   * needed - lets the user decide to flash first, then pick the board.
+   */
+  private startFlashFirmwareFlow = async (): Promise<void> => {
+    let port = this.state.selectedSerialPort;
+    if (!port || port === SIMULATION_PORT) {
+      let requested: string | null = null;
+      try {
+        requested = await request_serial_port();
+      } catch (err: unknown) {
+        console.error("Error requesting serial port for flashing:", err);
+      }
+      if (!requested || this.isDestroyed()) {
+        return;
+      }
+      port = requested;
+      this.setState({ selectedSerialPort: port });
+    }
+    this.setState({ showPreferences: false });
+    await this.startFlashFirmware(port);
+  };
+
+  /** Wired to the wrong-firmware banner's "Flash firmware" action (web only) - opens Settings, where Flash Firmware lives. */
+  private handleFlashFirmwareBannerAction = (): void => {
+    this.setState({ showPreferences: true });
+  };
+
   private handleRestartTourFromSettings = (): void => {
     this.setState({ showPreferences: true, firstRunTourStep: 0 });
   };
@@ -492,7 +552,9 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       fillWidth={inDrawer}
       omitKnitFooter={inDrawer}
       onClose={inDrawer ? this.handleCloseSidebarDrawer : undefined}
-      sessionLocked={this.state.isKnitting || this.state.isHardwareTesting}
+      sessionLocked={
+        this.state.isKnitting || this.state.isHardwareTesting || this.state.isFlashing
+      }
       machineRevision={this.state.machineRevision}
       imageWidth={this.state.imageWidth}
       imageHeight={this.state.imageHeight}
@@ -619,6 +681,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     const knitDisabled = isKnitButtonDisabled({
       isKnitting: this.state.isKnitting,
       isHardwareTesting: this.state.isHardwareTesting,
+      isFlashing: this.state.isFlashing,
       currentImageSettings: this.state.currentImageSettings,
       imageBits: this.state.imageBits,
     });
@@ -626,6 +689,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       ? getKnitDisabledReason({
           isKnitting: this.state.isKnitting,
           isHardwareTesting: this.state.isHardwareTesting,
+          isFlashing: this.state.isFlashing,
           currentImageSettings: this.state.currentImageSettings,
           imageBits: this.state.imageBits,
           imageWidth: this.state.imageWidth,
@@ -668,6 +732,9 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
               statusNotifier={this.knitStatusNotifier}
               userMessageText={this.state.userMessage?.text}
               userMessageLevel={this.state.userMessage?.level}
+              onUserMessageAction={
+                Device.isWeb() ? this.handleFlashFirmwareBannerAction : undefined
+              }
               tourHighlighted={
                 tourStep?.targetId === "checklist-target-pattern"
               }
@@ -682,13 +749,18 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             onClose={this.handleCloseSettings}
             onMachineChange={this.handleMachineChange}
             onHardwareTest={this.handleHardwareTestFromSettings}
+            onFlashFirmware={this.handleFlashFirmwareFromSettings}
             onRestartTour={this.handleRestartTourFromSettings}
             hardwareTestDisabled={
-              this.state.isKnitting || this.state.isHardwareTesting
+              this.state.isKnitting || this.state.isHardwareTesting || this.state.isFlashing
             }
             isHardwareTesting={this.state.isHardwareTesting}
+            flashFirmwareDisabled={
+              this.state.isKnitting || this.state.isHardwareTesting || this.state.isFlashing
+            }
+            isFlashing={this.state.isFlashing}
             restartTourDisabled={
-              this.state.isKnitting || this.state.isHardwareTesting
+              this.state.isKnitting || this.state.isHardwareTesting || this.state.isFlashing
             }
             activeTourTargetId={tourStep?.targetId}
             tourBubble={tourBubble}
@@ -700,6 +772,14 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             readyNotifier={this.hwTestReadyNotifier}
             onClose={this.handleHardwareTestClose}
             onCommand={this.handleHardwareTestCommand}
+          />
+        ) : undefined}
+        {this.state.isFlashing ? (
+          <FlashFirmwareModal
+            progressNotifier={this.flashProgressNotifier}
+            logNotifier={this.flashLogNotifier}
+            doneNotifier={this.flashDoneNotifier}
+            onClose={this.handleFlashFirmwareClose}
           />
         ) : undefined}
       </PreferencesProvider>
@@ -797,6 +877,52 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             },
           });
           this.hwTestReadyNotifier.set(false);
+        },
+        isDestroyed: () => this.isDestroyed(),
+      },
+    );
+  };
+
+  private startFlashFirmware = async (serialPortOverride?: string): Promise<void> => {
+    await runAppFlashFirmware(
+      {
+        isKnitting: this.state.isKnitting,
+        isHardwareTesting: this.state.isHardwareTesting,
+        isFlashing: this.state.isFlashing,
+        serialPort: serialPortOverride ?? this.state.selectedSerialPort,
+      },
+      {
+        onSessionStarted: (session) => {
+          resetFlashFirmwareNotifiers(
+            this.flashProgressNotifier,
+            this.flashLogNotifier,
+            this.flashDoneNotifier,
+          );
+          this.setState({
+            isFlashing: true,
+            flashSession: session,
+          });
+        },
+        onProgress: (bytesWritten, totalBytes) => {
+          this.flashProgressNotifier.set(totalBytes > 0 ? bytesWritten / totalBytes : 0);
+        },
+        onOutput: (text) => {
+          this.flashLogNotifier.update((log) => (log.length > 0 ? `${log}\n${text}` : text));
+        },
+        onFinished: (result) => {
+          this.flashDoneNotifier.set(true);
+          this.setState({
+            flashSession: undefined,
+            userMessage:
+              result === "finished"
+                ? {
+                    text: "Firmware flash complete. Reconnect to the board and try Knit again.",
+                    level: "success",
+                  }
+                : result === "error"
+                ? { text: "Firmware flash failed. See the log for details.", level: "error" }
+                : undefined,
+          });
         },
         isDestroyed: () => this.isDestroyed(),
       },

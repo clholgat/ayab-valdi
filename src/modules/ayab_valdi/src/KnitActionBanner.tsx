@@ -1,7 +1,12 @@
 import { Component } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
 import { View, Layout, Label } from "valdi_tsx/src/NativeTemplateElements";
-import { sansBoldFont, sansFont } from "constants/src/Typography";
+import { sansBoldFont, sansFont, BUTTON_FONT_TINY } from "constants/src/Typography";
+import {
+  CoreButton,
+  CoreButtonColoring,
+  CoreButtonSizing,
+} from "widgets/src/components/button/CoreButton";
 import { FeedbackLevel } from "./Feedback";
 import {
   getKnitActionBannerContent,
@@ -13,6 +18,10 @@ export interface KnitActionBannerViewModel {
   level?: FeedbackLevel;
   currentRow?: number;
   totalRows?: number;
+  /** Only rendered when the mapped content also has an actionLabel (e.g. the
+   *  wrong-firmware banner's "Flash firmware" action) - omitted entirely on
+   *  platforms that don't offer that action (see App.tsx's Device.isWeb() gate). */
+  onAction?: () => void;
 }
 
 function bannerColors(level: FeedbackLevel): {
@@ -80,6 +89,18 @@ export class KnitActionBanner extends Component<KnitActionBannerViewModel> {
           value={content.subtitle}
         />
       ) : undefined}
+      {content.actionLabel && vm.onAction ? (
+        <layout style={styles.actionRow}>
+          <CoreButton
+            accessibilityId="knit-action-banner-action"
+            text={content.actionLabel}
+            onTap={vm.onAction}
+            coloring={CoreButtonColoring.PRIMARY}
+            sizing={CoreButtonSizing.TINY}
+            font={BUTTON_FONT_TINY}
+          />
+        </layout>
+      ) : undefined}
     </view>;
   }
 }
@@ -122,4 +143,9 @@ const styles = {
       marginTop: 6,
       numberOfLines: 0,
     }),
+  actionRow: new Style<Layout>({
+    width: "100%",
+    marginTop: 10,
+    alignItems: "flex-start",
+  }),
 };

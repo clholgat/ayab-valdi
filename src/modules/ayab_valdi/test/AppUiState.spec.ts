@@ -68,4 +68,30 @@ describe("AppUiState", () => {
       }),
     ).toBe(true);
   });
+
+  it("isKnitButtonDisabled blocks knitting while flashing firmware", () => {
+    expect(
+      isKnitButtonDisabled({
+        isKnitting: false,
+        isHardwareTesting: false,
+        isFlashing: true,
+        currentImageSettings: settings,
+        imageBits: bits,
+      }),
+    ).toBe(true);
+  });
+
+  it("getKnitDisabledReason reports flashing in progress", () => {
+    expect(
+      getKnitDisabledReason({
+        isKnitting: false,
+        isHardwareTesting: false,
+        isFlashing: true,
+        currentImageSettings: settings,
+        imageBits: bits,
+        imageWidth: 1,
+        imageHeight: 1,
+      }),
+    ).toBe("Finish flashing firmware before knitting.");
+  });
 });

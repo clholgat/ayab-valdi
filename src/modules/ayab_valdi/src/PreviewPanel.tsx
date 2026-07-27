@@ -38,6 +38,9 @@ export interface PreviewPanelViewModel {
   statusNotifier?: ValueNotifier<number>;
   userMessageText?: string;
   userMessageLevel?: FeedbackLevel;
+  /** Wired only on platforms that offer an in-app action for the current
+   *  banner message (e.g. "Flash firmware" on web) - see App.tsx. */
+  onUserMessageAction?: () => void;
   tourHighlighted?: boolean;
   tourBubble?: ActiveTourBubble | null;
 }
@@ -100,6 +103,7 @@ export class PreviewPanel extends StatefulComponent<
             level={vm.userMessageLevel}
             currentRow={status?.currentRow}
             totalRows={status?.totalRows}
+            onAction={vm.onUserMessageAction}
           />
         ) : undefined}
         <layout style={styles.previewFill}>

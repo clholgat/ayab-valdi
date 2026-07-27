@@ -2,7 +2,7 @@
 
 This plan closes the PyQt → Valdi gaps using **tests first**. Desktop Python tests in `ayab-desktop` remain the oracle where fixtures exist.
 
-**Status (2026-07):** Phases 0–7 product/TDD work for practical knitting are **complete**. Remaining work is open-source hygiene (push/CI) and optional polish listed below.
+**Status (2026-07):** Phases 0–8 product/TDD work for practical knitting are **complete**. Remaining work is open-source hygiene (push/CI) and optional polish listed below.
 
 ---
 
@@ -21,7 +21,7 @@ This plan closes the PyQt → Valdi gaps using **tests first**. Desktop Python t
 | Item | Notes |
 |------|--------|
 | **Localization / i18n** | English-only |
-| **In-app firmware flash** | Wrong-API copy points users to ayab-desktop |
+| **In-app firmware flash on native platforms** | Web-only for now; native still points to ayab-desktop |
 | **Reflect / mirror dialog** | Won't implement |
 | **Rotate-right UI** | Won't wire (`rotateLeft` only in UI) |
 | **Empty checkerboard start** | Deferred — keep default checkerboard for now |
@@ -40,8 +40,10 @@ This plan closes the PyQt → Valdi gaps using **tests first**. Desktop Python t
 | **5** | Web E2E (9 specs) | ✅ locally |
 | **6** | App splits, `AppSessions`, `ValueNotifier` | ✅ |
 | **7** | mDNS + `.stp` goldens + UX tour/banner/needle/knit-side | ✅ |
+| **8** | In-app Uno firmware flash (Web Serial + STK500v1) | ✅ |
 
-Also shipped after Phase 7: wrong-API firmware recovery guidance in `Feedback` / `KnitActionBanner`.
+Also shipped after Phase 7: wrong-API firmware recovery guidance in `Feedback` / `KnitActionBanner`,
+later updated in Phase 8 to point at the new in-app flash action on web.
 
 ---
 
@@ -84,8 +86,10 @@ modules/preview/test/         ImageTransform, KnitSidePreviewLogic, PreviewTrans
 modules/image_settings/test/  ImageSettingsLogic, ImageSettingsComponent
 modules/app_settings/test/    Preferences, PreferencesScreen, AboutScreen
 modules/process_image/test/   Pat + Stp + Cut golden, CutPatternConverter
+modules/serial/test/firmware/ IntelHexParser, Stk500Protocol, Stk500FlashSession (mock bootloader)
 src/web/e2e/specs/            smoke, load-image/pat, validation, simulation-knit,
-                              hardware-test, settings, preview-transforms, progress-stitch
+                              hardware-test, settings, preview-transforms, progress-stitch,
+                              flash-firmware
 ```
 
 ---
@@ -97,7 +101,8 @@ src/web/e2e/specs/            smoke, load-image/pat, validation, simulation-knit
 | S0–S7 | Infra through architecture refactor | ✅ |
 | S8 | mDNS + `.stp` golden | ✅ |
 | S9 | First-run tour, action banner, knit-side, needles, stretch, firmware recovery | ✅ |
-| **S10** | Push / CI / public repo | **Next** |
+| S10 | In-app Uno firmware flash (Web Serial + STK500v1) | ✅ |
+| **S11** | Push / CI / public repo | **Next** |
 
 ---
 

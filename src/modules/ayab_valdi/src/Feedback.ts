@@ -10,8 +10,9 @@ export interface FeedbackMessage {
 
 /** Shown when the shield speaks an unsupported API / firmware version. */
 export const WRONG_FIRMWARE_MESSAGE =
-  "Wrong Arduino firmware version. Update the shield firmware with " +
-  "ayab-desktop (Tools → Load AYAB firmware), then reconnect.";
+  "Wrong Arduino firmware version. On web, use Settings → Flash Firmware " +
+  "to update it in-app. On other platforms, update with ayab-desktop " +
+  "(Tools → Load AYAB firmware), then reconnect.";
 
 /** Maps engine Output to user-visible messages (desktop FeedbackHandler parity). */
 export class Feedback {

@@ -10,9 +10,12 @@ export interface SettingsModalViewModel {
   onMachineChange?: () => void;
   onChange?: () => void;
   onHardwareTest?: () => void;
+  onFlashFirmware?: () => void;
   onRestartTour?: () => void;
   hardwareTestDisabled?: boolean;
   isHardwareTesting?: boolean;
+  flashFirmwareDisabled?: boolean;
+  isFlashing?: boolean;
   restartTourDisabled?: boolean;
   activeTourTargetId?: string;
   tourBubble?: ActiveTourBubble | null;
@@ -34,9 +37,12 @@ export class SettingsModal extends Component<SettingsModalViewModel> {
           onMachineChange={vm.onMachineChange}
           onChange={vm.onChange}
           onHardwareTest={vm.onHardwareTest}
+          onFlashFirmware={vm.onFlashFirmware}
           onRestartTour={vm.onRestartTour}
           hardwareTestDisabled={vm.hardwareTestDisabled}
           isHardwareTesting={vm.isHardwareTesting}
+          flashFirmwareDisabled={vm.flashFirmwareDisabled}
+          isFlashing={vm.isFlashing}
           restartTourDisabled={vm.restartTourDisabled}
           machineTourHighlighted={tourHighlightActive(
             vm.activeTourTargetId,

@@ -25,6 +25,10 @@ interface SerialPort extends EventTarget {
   getWriter(): WritableStreamDefaultWriter<Uint8Array>;
   readable: ReadableStream<Uint8Array> | null;
   writable: WritableStream<Uint8Array> | null;
+  setSignals?(signals: {
+    dataTerminalReady?: boolean;
+    requestToSend?: boolean;
+  }): Promise<void>;
 }
 
 interface Serial extends EventTarget {
@@ -302,6 +306,41 @@ function afterPortClosed(action: () => Promise<void> | void): Promise<void> | vo
   return g_portClosePromise.then(() => action());
 }
 
+/**
+ * Pulse DTR low (RTS untouched) then both DTR+RTS high, to reset the Arduino
+ * into its bootloader - mirrors SerialModuleFactoryMacOS.mm /
+ * SerialModuleFactoryLinux.cpp's TIOCM_DTR/TIOCM_RTS handling exactly, and
+ * confirmed against real hardware over Web Serial (a symmetric DTR+RTS-together
+ * pulse, or DTR-only, both failed to trigger a reset on a genuine Uno; this
+ * asymmetric sequence is what actually works). Harmless for a normal
+ * AYAB-firmware connection (the shield just reboots). setSignals is
+ * unavailable on some OS/driver combinations, hence the guard.
+ */
+async function pulseDtrRtsReset(port: SerialPort): Promise<void> {
+  try {
+    if (port.setSignals) {
+      await port.setSignals({ dataTerminalReady: false });
+      await scheduleTimeout(100);
+      await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+    }
+  } catch (err: unknown) {
+    console.warn("pulseDtrRtsReset: setSignals DTR pulse failed (ignored):", err);
+  }
+}
+
+/**
+ * Web only. Re-pulses DTR/RTS on the already-open port, without open_serial()'s
+ * ~2s settle delay (see the comment in open_serial() for why that delay is
+ * wrong for this use case). Used by Stk500FlashSession right before syncing,
+ * so it can catch Optiboot's short post-reset sync window.
+ */
+export async function pulse_dtr_rts_reset(): Promise<void> {
+  if (!g_serialPort) {
+    return;
+  }
+  await pulseDtrRtsReset(g_serialPort);
+}
+
 export function open_serial(uri: string): Promise<void> | void {
   if (isWebSocketUri(uri)) {
     if (g_isOpen) {
@@ -386,8 +425,19 @@ export function open_serial(uri: string): Promise<void> | void {
       g_isOpen = true;
       g_readBuffer = new Uint8Array(0);
 
+      await pulseDtrRtsReset(port);
+
       // Delay to allow Arduino to reset/initialize after port opening
       // macOS waits ~2s after DTR reset (pyserial exclusive=True parity).
+      //
+      // This is tuned for the normal AYAB-firmware connect path (Communication.ts
+      // needs the shield fully booted before sending reqInfo) - it is NOT
+      // suitable for Stk500FlashSession, whose Optiboot bootloader only listens
+      // for STK500 sync bytes for ~0.5-1s after reset. By the time this 2s
+      // delay elapses, that window has already closed. Stk500FlashSession
+      // therefore calls the exported pulse_dtr_rts_reset() again itself, right
+      // before syncing, to get a freshly-timed reset instead of relying on
+      // this one.
       await scheduleTimeout(2000);
 
       if (g_serialPort && g_serialPort.readable) {

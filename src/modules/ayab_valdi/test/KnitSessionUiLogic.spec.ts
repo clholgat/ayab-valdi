@@ -42,16 +42,19 @@ describe("KnitSessionUiLogic", () => {
       expect(content.subtitle).toContain("KC-I");
     });
 
-    it("maps wrong firmware to ayab-desktop recovery guidance", () => {
+    it("maps wrong firmware to in-app flash + ayab-desktop recovery guidance", () => {
       const content = getKnitActionBannerContent(
-        "Wrong Arduino firmware version. Update the shield firmware with " +
-          "ayab-desktop (Tools → Load AYAB firmware), then reconnect.",
+        "Wrong Arduino firmware version. On web, use Settings → Flash Firmware " +
+          "to update it in-app. On other platforms, update with ayab-desktop " +
+          "(Tools → Load AYAB firmware), then reconnect.",
         "blocking",
       );
       expect(content.title).toBe("Update AYAB firmware");
       expect(content.subtitle).toContain("ayab-desktop");
       expect(content.subtitle).toContain("Load AYAB firmware");
+      expect(content.subtitle).toContain("Flash Firmware");
       expect(content.level).toBe("blocking");
+      expect(content.actionLabel).toBe("Flash firmware");
     });
   });
 
