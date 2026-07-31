@@ -1,0 +1,19 @@
+Byte-exact bundled data files (Snapchat/Valdi#116) are added to a module's
+srcs as `<name>.<realext>.bin`. valdi_module() forwards that same srcs list
+into the auto-generated valdi_test target (valdi_module.bzl's
+_setup_test_target), but valdi_test's srcs attribute only allowlists
+.js/.ts/.tsx/.json, so any module with a .bin source fails at analysis time
+with "misplaced" / "does not produce any valdi_test srcs files". .bin files
+are never test files (valdi_test's _is_test_file only matches a /test/ path
+segment), so allowlisting the extension is enough; no runtime behavior changes.
+--- a/bzl/valdi/valdi_test.bzl
++++ b/bzl/valdi/valdi_test.bzl
+@@ -89,7 +89,7 @@
+         "srcs": attr.label_list(
+             doc = "List of sources for this module",
+             mandatory = True,
+-            allow_files = [".js", ".ts", ".tsx", ".json"],
++            allow_files = [".js", ".ts", ".tsx", ".json", ".bin"],
+         ),
+         "js_engine": attr.label(
+             default = Label("@valdi//bzl/valdi:js_engine"),

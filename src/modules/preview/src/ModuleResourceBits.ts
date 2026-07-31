@@ -1,22 +1,34 @@
 import { getModuleFileEntryAsBytes } from "valdi_core/src/Valdi";
-import {
-  addAssetLoadObserver,
-  AssetOutputType,
-} from "valdi_core/src/Asset";
 import { decodeBitmap } from "drawing/src/BitmapFactory";
 import { SAMPLE_PATTERN_IMAGE_BASE64 } from "./SamplePatternImageData";
 
 /**
- * Decodes bundled sample patterns pixel-exact on every platform. Sample
- * bytes come from SAMPLE_PATTERN_IMAGE_BASE64 (embedded in the JS bundle)
- * rather than the module's packaged res/ files: on Android, res/*.png gets
- * re-encoded into per-density WebP drawables, and both the direct file-entry
- * lookup and the asset-load observer below ultimately resolve through that
- * same drawable pipeline, so neither actually yields the original bytes.
- * WebP is lossy and density-scales the image, which turns hard black/white
- * stitch edges into gray compression artifacts. The lookups below remain as
- * a fallback for resources outside the embedded set.
+ * Decodes bundled sample patterns pixel-exact on native platforms (Android,
+ * macOS). Bytes come from SAMPLE_PATTERN_IMAGE_BASE64 (embedded in the JS
+ * bundle) first, falling back to `src/patterns/<stem>.png.bin` (see PR notes
+ * on github.com/Snapchat/Valdi#116) via getModuleFileEntryAsBytes for any
+ * stem not embedded.
+ *
+ * Not usable on web: both halves of the pipeline are broken there --
+ * getModuleFileEntryAsBytes's web runtime is a permanent stub returning
+ * '{}' regardless of arguments (github.com/Snapchat/Valdi#128), and
+ * decodeBitmap (drawing/src/BitmapFactory) silently decodes real PNG bytes
+ * into a bogus 1x1 image on web instead of throwing -- confirmed empirically
+ * (correct embedded bytes in, wrong 1x1 bitmap out, no error either side).
+ * Web must use embeddedSampleDataUrl + getBitsAsync (canvas decode) instead;
+ * see Preview.tsx's loadImageSource.
  */
+
+const PNG_SIGNATURE: ReadonlyArray<number> = [
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+];
+
+function looksLikePng(bytes: Uint8Array): boolean {
+  return (
+    bytes.length > PNG_SIGNATURE.length &&
+    PNG_SIGNATURE.every((byte, i) => bytes[i] === byte)
+  );
+}
 
 export function parseModuleResource(
   source: string,
@@ -32,56 +44,23 @@ export function parseModuleResource(
   return { module: source.substring(0, colon), stem: source.substring(colon + 1) };
 }
 
+/** A `data:` URL for getBitsAsync/canvas decode -- the path that works on web. */
+export function embeddedSampleDataUrl(stem: string): string | undefined {
+  const embedded = SAMPLE_PATTERN_IMAGE_BASE64[stem];
+  return embedded ? `data:image/png;base64,${embedded}` : undefined;
+}
+
 function moduleFileBytes(module: string, stem: string): Uint8Array | null {
-  // Sample PNG bytes ship twice: as regular res images (for <image> display)
-  // and as res/<stem>.raw passthrough copies, because the compiler resamples
-  // res images into density variants (Android would decode a blurry,
-  // wrong-sized webp). Unrecognized extensions pass through untouched.
-  for (const candidate of [`${stem}.raw`, `res/${stem}.raw`, `${stem}.png`, `res/${stem}.png`]) {
-    try {
-      return getModuleFileEntryAsBytes(module, candidate);
-    } catch {
-      // Try the next layout.
-    }
+  let bytes: Uint8Array;
+  try {
+    bytes = getModuleFileEntryAsBytes(module, `src/patterns/${stem}.png.bin`);
+  } catch {
+    return null;
   }
-  return null;
+  return bytes && looksLikePng(bytes) ? bytes : null;
 }
 
-function assetBytes(source: string): Promise<Uint8Array | null> {
-  return new Promise(resolve => {
-    let unsubscribe: (() => void) | null = null;
-    let finished = false;
-    const finish = (bytes: Uint8Array | null): void => {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      resolve(bytes);
-      if (unsubscribe) {
-        unsubscribe();
-        unsubscribe = null;
-      }
-    };
-    const subscription = addAssetLoadObserver(
-      source,
-      (loaded, error) => {
-        if (error != null || !(loaded instanceof Uint8Array)) {
-          finish(null);
-          return;
-        }
-        finish(loaded);
-      },
-      AssetOutputType.BYTES,
-    );
-    if (finished) {
-      subscription.unsubscribe();
-    } else {
-      unsubscribe = subscription.unsubscribe;
-    }
-  });
-}
-
-function bitsFromEncodedBytes(bytes: Uint8Array | string): Uint8Array[][] | null {
+function bitsFromBytes(bytes: Uint8Array): Uint8Array[][] {
   const bitmap = decodeBitmap(bytes);
   try {
     const info = bitmap.getInfo();
@@ -110,7 +89,7 @@ function bitsFromEncodedBytes(bytes: Uint8Array | string): Uint8Array[][] | null
   }
 }
 
-/** Rows of [R, G, B, A] pixel byte arrays, one per stitch, at source size. */
+/** Rows of [R, G, B, A] pixel byte arrays, one per stitch, at source size. Native only -- see module doc. */
 export async function loadModuleResourceBits(
   source: string,
 ): Promise<Uint8Array[][] | null> {
@@ -119,20 +98,14 @@ export async function loadModuleResourceBits(
     return null;
   }
   const embedded = SAMPLE_PATTERN_IMAGE_BASE64[resource.stem];
-  if (embedded) {
-    try {
-      return bitsFromEncodedBytes(embedded);
-    } catch {
-      return null;
-    }
-  }
-  const direct = moduleFileBytes(resource.module, resource.stem);
-  const bytes = direct ?? (await assetBytes(source));
+  const bytes = embedded
+    ? Uint8Array.from(atob(embedded), (c) => c.charCodeAt(0))
+    : moduleFileBytes(resource.module, resource.stem);
   if (!bytes) {
     return null;
   }
   try {
-    return bitsFromEncodedBytes(bytes);
+    return bitsFromBytes(bytes);
   } catch {
     return null;
   }

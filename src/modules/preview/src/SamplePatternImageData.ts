@@ -1,17 +1,15 @@
 /**
  * Base64-encoded PNG bytes for bundled sample patterns, embedded directly in the
- * JS bundle rather than shipped as Android drawable resources.
+ * JS bundle so pixel-exact decoding works on every platform.
  *
- * Android's resource packaging re-encodes res/*.png into per-density WebP
- * drawables (see moduleFileBytes's res/*.raw passthrough attempt in
- * ModuleResourceBits.ts) -- but plain module file entries and the asset-load
- * observer both ultimately resolve through that same drawable pipeline on
- * Android, so neither actually bypasses it. WebP is lossy and density-scales
- * the image (e.g. triangles_60x10.png ships as an 80x14 WebP on xxxhdpi),
- * which turns hard black/white stitch edges into gray compression artifacts.
- * Embedding the exact source bytes here guarantees pixel-exact decoding on
- * every platform, since decodeBitmap can decode a base64 string directly and
- * this file never touches Android's drawable/resource pipeline at all.
+ * This exists because neither native-module-file-entry retrieval nor the res/
+ * catalog/registry lookup is reliable everywhere:
+ *  - Android resource pipeline re-encodes res/*.png into per-density WebP
+ *    drawables, corrupting hard black/white stitch edges into gray artifacts.
+ *  - The web runtime getModuleEntry (backing getModuleFileEntryAsBytes) is a
+ *    permanent stub that returns '{}' regardless of arguments -- byte-exact
+ *    module-file retrieval does not work on web at all.
+ * A plain JS string constant sidesteps both: it never touches either pipeline.
  */
 export const SAMPLE_PATTERN_IMAGE_BASE64: Record<string, string> = {
   "1.01":

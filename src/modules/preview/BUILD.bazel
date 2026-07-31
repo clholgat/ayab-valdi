@@ -17,6 +17,7 @@ valdi_module(
         [
             "src/**/*.ts",
             "src/**/*.tsx",
+            "src/**/*.bin",  # byte-exact sample pattern bytes, bundled verbatim as retrievable entries
             "test/**/*.ts",
             "test/**/*.tsx",
         ],
@@ -27,8 +28,8 @@ valdi_module(
         "res/**/*.png",
         "res/**/*.svg",
         "res/**/*.webp",
-        "res/*.raw",
     ]),
+    inline_assets = True,
     visibility = ["//visibility:public"],
     deps = [
         "@valdi//src/valdi_modules/src/valdi/drawing",

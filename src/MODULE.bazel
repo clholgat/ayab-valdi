@@ -18,6 +18,7 @@ archive_override(
     strip_prefix = VALDI_STRIP_PREFIX,
     patches = [
         "//patches/valdi:0001-Align-libvaldi-LOAD-segments-for-16KB-pages.patch",
+        "//patches/valdi:0002-Allow-bin-files-in-valdi_test-srcs.patch",
     ],
     patch_strip = 1,
 )
