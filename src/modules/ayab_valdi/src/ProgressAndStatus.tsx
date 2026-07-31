@@ -221,6 +221,7 @@ export class ProgressAndStatus extends StatefulComponent<
     }
 
     <view
+      accessibilityId="progress-status"
       style={sidebarCardStyle}
       backgroundColor={SIDEBAR_CARD_BACKGROUND}
       borderColor={SIDEBAR_CARD_BORDER}

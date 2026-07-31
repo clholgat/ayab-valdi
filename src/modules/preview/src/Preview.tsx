@@ -10,8 +10,8 @@ import { Style } from "valdi_core/src/Style";
 import { Device } from "valdi_core/src/Device";
 import { getBits } from "process_image/src/ProcessImageNative";
 import {
-  embeddedSampleDataUrl,
   loadModuleResourceBits,
+  moduleResourceDataUrl,
   parseModuleResource,
 } from "./ModuleResourceBits";
 // @ts-ignore - getBitsAsync may be available in web
@@ -204,8 +204,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     // loadModuleResourceBits's pixel-exact path is correct and preferred
     // (Android R drawables are density-resampled and unusable otherwise).
     if (parseModuleResource(source)) {
-      const resource = parseModuleResource(source)!;
-      const dataUrl = Device.isWeb() ? embeddedSampleDataUrl(resource.stem) : undefined;
+      const dataUrl = Device.isWeb() ? moduleResourceDataUrl(source) : undefined;
       if (dataUrl && typeof getBitsAsync !== "undefined" && getBitsAsync) {
         getBitsAsync(dataUrl)
           .then((bits: Uint8Array[][]) => {

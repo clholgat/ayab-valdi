@@ -1,6 +1,7 @@
 import "jasmine/src/jasmine";
 import {
   loadModuleResourceBits,
+  moduleResourceDataUrl,
   parseModuleResource,
 } from "preview/src/ModuleResourceBits";
 
@@ -21,6 +22,12 @@ describe("parseModuleResource", () => {
 });
 
 describe("loadModuleResourceBits", () => {
+  it("exposes exact bundled PNG bytes as a data URL", () => {
+    const dataUrl = moduleResourceDataUrl("preview:spaceinvader_33x32");
+    expect(dataUrl).toBeDefined();
+    expect(dataUrl!.startsWith("data:image/png;base64,iVBORw0KGgo")).toBeTrue();
+  });
+
   it("decodes a bundled sample at exact pixel dimensions", async () => {
     const bits = await loadModuleResourceBits("preview:spaceinvader_33x32");
     if (bits === null) {

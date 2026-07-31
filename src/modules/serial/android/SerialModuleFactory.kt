@@ -322,6 +322,13 @@ class SerialModuleImpl: SerialModule {
         return ResolvedPromise(get_serial_ports())
     }
 
+    override fun pulse_dtr_rts_reset(): Promise<Unit> {
+        // Firmware flashing is currently web-only. Keep the native bridge
+        // complete so adding the web helper to Serial.d.ts does not break the
+        // Android build.
+        return ResolvedPromise(Unit)
+    }
+
     override fun browse_ayab_mdns(): List<Map<String, Any?>> {
         return emptyList()
     }

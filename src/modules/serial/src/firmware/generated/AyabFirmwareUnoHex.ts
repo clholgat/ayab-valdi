@@ -3,9 +3,9 @@
  * Source: AllYarnsAreBeautiful/ayab-firmware release 1.0.0, ayab_monolithic_uno.hex
  * sha256: 4e620ebf0bc1423117470947cccc138bcc733874022b02b688b79ee86b2b8a6a
  *
- * Embedded as plain text (Intel HEX is already ASCII), not base64 - unlike
- * preview/src/SamplePatternImageData.ts's PNG bytes, no binary encoding is
- * needed, and this stays human-diffable in git. Bundled into the JS build so
+ * Embedded as plain text (Intel HEX is already ASCII), while binary image data
+ * uses Valdi's byte-exact .bin module entries. This stays human-diffable in git
+ * and is bundled into the JS build so
  * it's served same-origin at runtime (see pin-ayab-firmware.sh header for why
  * a live browser fetch of the GitHub release asset doesn't work).
  */
