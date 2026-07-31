@@ -1,7 +1,8 @@
 import { Device } from "valdi_core/src/Device";
 import { loadCatalog } from "valdi_core/src/AssetCatalog";
+import { ANNOTATED_PATTERN_FILES } from "./AnnotatedPatternFiles";
 
-export type SamplePatternCategory = "featured" | "kh910";
+export type SamplePatternCategory = "featured" | "annotated" | "kh910";
 
 export interface SamplePattern {
   id: string;
@@ -164,11 +165,30 @@ const KH910_PATTERNS: SamplePattern[] = KH910_FILE_NAMES.map((fileName) => {
   );
 });
 
+const ANNOTATED_PATTERNS: SamplePattern[] = ANNOTATED_PATTERN_FILES.map(
+  ({ fileName, label }) => {
+    const stem = patternFileStem(fileName);
+    const sample = makePattern(
+      fileName,
+      label,
+      `annotated-${stem}`,
+      "annotated",
+      `preview-sample-annotated-${stem}`,
+    );
+    return { ...sample, resource: `preview:annotated/${stem}` };
+  },
+);
+
 export const SAMPLE_PATTERN_SECTIONS: SamplePatternSection[] = [
   {
     id: "featured",
     title: "Tutorial patterns",
     patterns: FEATURED_PATTERNS,
+  },
+  {
+    id: "annotated",
+    title: "Annotated StitchWorld patterns",
+    patterns: ANNOTATED_PATTERNS,
   },
   {
     id: "kh910",

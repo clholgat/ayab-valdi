@@ -24,15 +24,28 @@ function looksLikePng(bytes: Uint8Array): boolean {
 export function parseModuleResource(
   source: string,
 ): { module: string; stem: string } | null {
-  // Paths and URI schemes (file:, content:, /abs, C:\) are not module refs.
-  if (source.includes("/") || source.includes("\\")) {
-    return null;
-  }
   const colon = source.indexOf(":");
   if (colon <= 0 || colon === source.length - 1) {
     return null;
   }
-  return { module: source.substring(0, colon), stem: source.substring(colon + 1) };
+  const module = source.substring(0, colon);
+  const stem = source.substring(colon + 1);
+  // Allow nested module entries such as preview:annotated/stitchworld-004,
+  // while rejecting paths, data URLs, and arbitrary URI schemes.
+  const stemSegments = stem.split("/");
+  if (
+    !/^[A-Za-z0-9_.-]+$/.test(module) ||
+    stemSegments.some(
+      (segment) =>
+        segment.length === 0 ||
+        segment === "." ||
+        segment === ".." ||
+        !/^[A-Za-z0-9_.-]+$/.test(segment),
+    )
+  ) {
+    return null;
+  }
+  return { module, stem };
 }
 
 function moduleFileBytes(module: string, stem: string): Uint8Array | null {

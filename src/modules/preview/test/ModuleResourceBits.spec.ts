@@ -13,6 +13,13 @@ describe("parseModuleResource", () => {
     });
   });
 
+  it("parses nested module entries used by annotated patterns", () => {
+    expect(parseModuleResource("preview:annotated/stitchworld-004")).toEqual({
+      module: "preview",
+      stem: "annotated/stitchworld-004",
+    });
+  });
+
   it("rejects paths and URIs", () => {
     expect(parseModuleResource("/tmp/foo.png")).toBeNull();
     expect(parseModuleResource("file:///tmp/foo.png")).toBeNull();
@@ -24,6 +31,14 @@ describe("parseModuleResource", () => {
 describe("loadModuleResourceBits", () => {
   it("exposes exact bundled PNG bytes as a data URL", () => {
     const dataUrl = moduleResourceDataUrl("preview:spaceinvader_33x32");
+    expect(dataUrl).toBeDefined();
+    expect(dataUrl!.startsWith("data:image/png;base64,iVBORw0KGgo")).toBeTrue();
+  });
+
+  it("exposes a synced annotated PNG from a nested module entry", () => {
+    const dataUrl = moduleResourceDataUrl(
+      "preview:annotated/stitchworld-004",
+    );
     expect(dataUrl).toBeDefined();
     expect(dataUrl!.startsWith("data:image/png;base64,iVBORw0KGgo")).toBeTrue();
   });

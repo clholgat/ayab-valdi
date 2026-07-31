@@ -1,4 +1,7 @@
-import { patternRegistryKey } from "../src/SamplePatterns";
+import {
+  patternRegistryKey,
+  SAMPLE_PATTERN_SECTIONS,
+} from "../src/SamplePatterns";
 
 describe("SamplePatterns", () => {
   it("maps tutorial filenames to web registry keys", () => {
@@ -11,5 +14,16 @@ describe("SamplePatterns", () => {
   it("keeps dotted KH-910 filenames as registry keys", () => {
     expect(patternRegistryKey("1.01.png")).toBe("1.01");
     expect(patternRegistryKey("10.36.png")).toBe("10.36");
+  });
+
+  it("includes every locally synced annotated AYAB pattern", () => {
+    const annotated = SAMPLE_PATTERN_SECTIONS.find(
+      (section) => section.id === "annotated",
+    );
+    expect(annotated).toBeDefined();
+    expect(annotated!.patterns.length).toBe(480);
+    expect(annotated!.patterns[0]!.resource).toBe(
+      "preview:annotated/stitchworld-004",
+    );
   });
 });
