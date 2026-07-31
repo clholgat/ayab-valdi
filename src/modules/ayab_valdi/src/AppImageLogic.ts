@@ -10,6 +10,8 @@ import { NeedleColor } from "image_settings/src/Types";
 
 export interface RepeatedImageState {
   sourceImageBits: Uint8Array[][];
+  /** Row memos (ayab-desktop#779) aligned to sourceImageBits, pre-transform. */
+  sourceRowMemos: string[];
   stretchH: number;
   stretchV: number;
   repeatH: number;
@@ -18,6 +20,8 @@ export interface RepeatedImageState {
   imageWidth: number;
   imageHeight: number;
   imageBitsRevision: number;
+  /** Row memos aligned to imageBits, post-transform. See rowMemosForTransform. */
+  rowMemos: string[];
 }
 
 /**
@@ -59,6 +63,27 @@ export function settingsForLoadedImage(
   };
 }
 
+/**
+ * Row memos (ayab-desktop#779) after vertical stretch/repeat, matching
+ * transforms.py: stretch resamples rows (interpolated/duplicated), which has
+ * no well-defined per-row memo mapping, so it drops memos entirely; repeat
+ * tiles whole rows, so memos tile the same way (`self.memos = self.memos * v`).
+ */
+export function rowMemosForTransform(
+  sourceRowMemos: string[],
+  repeatV: number,
+  stretchV: number,
+): string[] {
+  if (sourceRowMemos.length === 0 || stretchV !== 1) {
+    return [];
+  }
+  const tiled: string[] = [];
+  for (let i = 0; i < repeatV; i++) {
+    tiled.push(...sourceRowMemos);
+  }
+  return tiled;
+}
+
 export function buildRepeatedImageState(
   source: Uint8Array[][],
   repeatH: number,
@@ -66,6 +91,7 @@ export function buildRepeatedImageState(
   imageBitsRevision: number,
   stretchH = 1,
   stretchV = 1,
+  sourceRowMemos: string[] = [],
 ): RepeatedImageState {
   const scaled = stretch(source, stretchV, stretchH);
   const imageBits = repeat(scaled, repeatV, repeatH);
@@ -73,6 +99,7 @@ export function buildRepeatedImageState(
   const imageWidth = imageHeight > 0 ? imageBits[0]!.length : 0;
   return {
     sourceImageBits: source,
+    sourceRowMemos,
     stretchH,
     stretchV,
     repeatH,
@@ -81,5 +108,6 @@ export function buildRepeatedImageState(
     imageWidth,
     imageHeight,
     imageBitsRevision: imageBitsRevision + 1,
+    rowMemos: rowMemosForTransform(sourceRowMemos, repeatV, stretchV),
   };
 }

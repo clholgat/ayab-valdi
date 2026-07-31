@@ -24,6 +24,8 @@ export interface RunAppKnitParams {
   imageBits?: Uint8Array[][];
   imageWidth?: number;
   imageHeight?: number;
+  /** Row memos (ayab-desktop#779), aligned to imageBits. */
+  rowMemos?: string[];
   preferences: Preferences;
   serialPort?: string;
   audio: AudioFeedbackSink;
@@ -78,6 +80,7 @@ export async function runAppKnit(
     imageBits,
     imageWidth,
     imageHeight,
+    rowMemos: params.rowMemos,
     settings,
     preferences: params.preferences,
     serialPort: params.serialPort,

@@ -207,8 +207,9 @@ function trackCnfLine(comm: CommunicationMock): {
   };
 }
 
-function makeKnitControl(patternHeight: number = 3): Control {
+function makeKnitControl(patternHeight: number = 3, memos: string[] = []): Control {
   const pattern = makeLeftAlignedPattern(40, patternHeight);
+  pattern.memos = memos;
   const control = new Control();
   control.start(
     pattern,
@@ -247,6 +248,25 @@ describe("Control.cnf_line_API6", () => {
     expect(tracker.calls.length).toBe(2);
     expect(control.status.currentRow).toBe(2);
     tracker.restore();
+  });
+
+  it("sets status.rowMemo from the pattern's per-row memo (ayab-desktop#779)", () => {
+    const control = makeKnitControl(3, ["2", "0", "7"]);
+
+    control.cnf_line_API6(0);
+    expect(control.status.rowMemo).toBe("2");
+
+    control.cnf_line_API6(1);
+    expect(control.status.rowMemo).toBe("0");
+
+    control.cnf_line_API6(2);
+    expect(control.status.rowMemo).toBe("7");
+  });
+
+  it("defaults status.rowMemo to '0' when the pattern has no memos", () => {
+    const control = makeKnitControl(3);
+    control.cnf_line_API6(0);
+    expect(control.status.rowMemo).toBe("0");
   });
 
   it("returns true on last pattern row when not repeating", () => {

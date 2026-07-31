@@ -6,7 +6,7 @@ import { StatefulComponent } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
 import { Layout, ScrollView, View, Label } from "valdi_tsx/src/NativeTemplateElements";
 import { ElementFrame } from "valdi_tsx/src/Geometry";
-import { sansFont } from "constants/src/Typography";
+import { sansFont, sansBoldFont } from "constants/src/Typography";
 import {
   NEEDLE_GRID_BORDER_LEFT,
   NEEDLE_GRID_BORDER_RIGHT,
@@ -21,6 +21,8 @@ import {
 export interface KnitProgressRowViewModel {
   title: string;
   detail?: string;
+  /** Row memo (ayab-desktop#779), if the pattern carries one for this row. */
+  memo?: string;
   bits: Uint8Array;
   knitStartNeedle: number;
   knitNeedleCount: number;
@@ -68,6 +70,12 @@ const styles = {
   rowDetail: new Style<Label>({
     font: sansFont(11),
     color: "#666666",
+    marginLeft: 6,
+    numberOfLines: 1,
+  }),
+  rowMemo: new Style<Label>({
+    font: sansBoldFont(11),
+    color: "#92400E",
     marginLeft: 6,
     numberOfLines: 1,
   }),
@@ -196,11 +204,13 @@ class KnitProgressRowInner extends StatefulComponent<
     }
 
     const detail = vm.detail ?? "";
+    const memo = vm.memo ?? "";
 
     <layout style={styles.tableRow}>
       <layout style={styles.rowTitleCol}>
         <label style={styles.rowTitle} value={vm.title} />
         {detail.length > 0 && <label style={styles.rowDetail} value={detail} />}
+        {memo.length > 0 && <label style={styles.rowMemo} value={memo} />}
       </layout>
       <scroll
         style={styles.stripScroll}

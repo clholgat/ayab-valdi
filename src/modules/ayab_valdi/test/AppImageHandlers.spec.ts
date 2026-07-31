@@ -51,4 +51,49 @@ describe("createAppImageHandlers", () => {
     }));
     expect(handlers.handleRepeatChange(2, 2)).toBeNull();
   });
+
+  it("carries memos passed to handleBitsLoaded into sourceRowMemos/rowMemos", () => {
+    const state = {
+      sourceImageBits: undefined as Uint8Array[][] | undefined,
+      stretchH: 1,
+      stretchV: 1,
+      repeatH: 1,
+      repeatV: 1,
+      imageBitsRevision: 0,
+    };
+    const handlers = createAppImageHandlers(() => state);
+    const next = handlers.handleBitsLoaded(makeBits(2, 2), 2, 2, ["5", "0"]);
+    expect(next.sourceRowMemos).toEqual(["5", "0"]);
+    expect(next.rowMemos).toEqual(["5", "0"]);
+  });
+
+  it("hflip and invert preserve memos (rows unchanged, matching transforms.py)", () => {
+    const state = {
+      sourceImageBits: makeBits(2, 2),
+      sourceRowMemos: ["3", "0"],
+      stretchH: 1,
+      stretchV: 1,
+      repeatH: 1,
+      repeatV: 1,
+      imageBitsRevision: 0,
+    };
+    const handlers = createAppImageHandlers(() => state);
+    expect(handlers.handleFlipH()?.rowMemos).toEqual(["3", "0"]);
+    expect(handlers.handleInvert()?.rowMemos).toEqual(["3", "0"]);
+  });
+
+  it("vflip and rotateLeft drop memos (row order/shape changes, matching transforms.py)", () => {
+    const state = {
+      sourceImageBits: makeBits(2, 2),
+      sourceRowMemos: ["3", "0"],
+      stretchH: 1,
+      stretchV: 1,
+      repeatH: 1,
+      repeatV: 1,
+      imageBitsRevision: 0,
+    };
+    const handlers = createAppImageHandlers(() => state);
+    expect(handlers.handleFlipV()?.rowMemos).toEqual([]);
+    expect(handlers.handleRotateLeft()?.rowMemos).toEqual([]);
+  });
 });

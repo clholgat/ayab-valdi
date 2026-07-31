@@ -19,6 +19,8 @@ export interface KnitStartParams {
   imageBits: Uint8Array[][];
   imageWidth: number;
   imageHeight: number;
+  /** Row memos (ayab-desktop#779), aligned to imageBits. */
+  rowMemos?: string[];
   settings: ImageSettings;
   preferences: Preferences;
   serialPort?: string;
@@ -55,7 +57,11 @@ export class KnitSession {
       imageHeight,
       settings.numColors,
     );
-    const pattern = new Pattern(patternImage, settings.numColors);
+    const pattern = new Pattern(
+      patternImage,
+      settings.numColors,
+      params.rowMemos ?? [],
+    );
     pattern.mode = settings.mode;
 
     const machine = preferences.machine;

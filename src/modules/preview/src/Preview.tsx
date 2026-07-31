@@ -10,15 +10,21 @@ import { Style } from "valdi_core/src/Style";
 import { Device } from "valdi_core/src/Device";
 import { getBits } from "process_image/src/ProcessImageNative";
 import {
+  embeddedSampleDataUrl,
   loadModuleResourceBits,
   parseModuleResource,
 } from "./ModuleResourceBits";
 // @ts-ignore - getBitsAsync may be available in web
 import { getBitsAsync } from "process_image/src/ProcessImageNative";
+// @ts-ignore - readFileBytes is native-only (desktop/Android); undefined on web
+import { readFileBytes } from "process_image/src/ProcessImageNative";
 import {
   isSupportedPatternFileName,
   loadPatternFromSelection,
 } from "process_image/src/PatternFileLoader";
+import { dataUrlToBytes } from "process_image/src/PatternImportBinary";
+import { readPngComment } from "process_image/src/PngMetadata";
+import { parseAyabMemos } from "process_image/src/PatternMemo";
 import {
   FilePicker,
   FilePickerOnSelectEvent,
@@ -49,6 +55,8 @@ declare const module: { path: string; exports: unknown };
 export interface PatternLoadInfo {
   fileName: string;
   userSelected: boolean;
+  /** Per-row memo digits ("0" = none) recovered from the PNG Comment tag, if any. */
+  memos?: string[];
 }
 
 export interface PreviewViewModel {
@@ -134,6 +142,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     bits: Uint8Array[][],
     fileName: string,
     userSelected: boolean,
+    memos: string[] = [],
   ): void {
     if (this.isDestroyed()) return;
 
@@ -148,7 +157,30 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     this.viewModel.onBitsLoaded?.(bits, width, height, {
       fileName,
       userSelected,
+      memos,
     });
+  }
+
+  /**
+   * PNG Comment-tag row memos (ayab-desktop#779) live only in the raw file
+   * bytes -- every pixel decoder we use (canvas, native bitmap decoders)
+   * strips metadata. Reads the same source the picker already gave us
+   * (dataUrl on web, filesystem path on desktop/Android) a second time, as
+   * raw bytes, purely for its Comment tag. Failure here must never block
+   * the image from loading, so this always resolves rather than throwing.
+   */
+  private extractMemos(event: FilePickerOnSelectEvent): string[] {
+    try {
+      if (event.dataUrl) {
+        return parseAyabMemos(readPngComment(dataUrlToBytes(event.dataUrl)));
+      }
+      if (event.path && typeof readFileBytes === "function") {
+        return parseAyabMemos(readPngComment(readFileBytes(event.path)));
+      }
+    } catch (error) {
+      console.error("Failed to read pattern memo metadata:", error);
+    }
+    return [];
   }
 
   private loadImageSource(
@@ -157,6 +189,52 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     userSelected: boolean,
   ): void {
     const generation = this.loadGeneration;
+
+    // Module-resource samples ("preview:stem") need a platform-specific
+    // decode path -- neither of the two below understands that scheme, and
+    // the two "obvious" fixes both silently produce wrong pixels rather
+    // than erroring, which cost real debugging time to track down:
+    //   - getBitsAsync would hand "preview:stem" to the browser as a
+    //     literal image URL (fails outright, at least visibly).
+    //   - loadModuleResourceBits (decodeBitmap) is not usable on web at
+    //     all: confirmed empirically that it silently decodes correct PNG
+    //     bytes into a bogus 1x1 image there (see ModuleResourceBits.ts).
+    // On web the only decode path verified to actually work is
+    // getBitsAsync fed a real `data:` URL (canvas decode); on native,
+    // loadModuleResourceBits's pixel-exact path is correct and preferred
+    // (Android R drawables are density-resampled and unusable otherwise).
+    if (parseModuleResource(source)) {
+      const resource = parseModuleResource(source)!;
+      const dataUrl = Device.isWeb() ? embeddedSampleDataUrl(resource.stem) : undefined;
+      if (dataUrl && typeof getBitsAsync !== "undefined" && getBitsAsync) {
+        getBitsAsync(dataUrl)
+          .then((bits: Uint8Array[][]) => {
+            if (this.isDestroyed() || generation !== this.loadGeneration) {
+              return;
+            }
+            this.applyBits(bits, fileName, userSelected);
+          })
+          .catch((error: unknown) => {
+            console.error("Failed to load sample:", error);
+          });
+        return;
+      }
+      loadModuleResourceBits(source)
+        .then(bits => {
+          if (this.isDestroyed() || generation !== this.loadGeneration) {
+            return;
+          }
+          if (bits) {
+            this.applyBits(bits, fileName, userSelected);
+            return;
+          }
+          console.error("Failed to load sample: no bits for " + source);
+        })
+        .catch((error: unknown) => {
+          console.error("Failed to load sample:", error);
+        });
+      return;
+    }
 
     if (Device.isWeb() && typeof getBitsAsync !== "undefined" && getBitsAsync) {
       getBitsAsync(source)
@@ -168,27 +246,6 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
         })
         .catch((error: unknown) => {
           console.error("Failed to load image:", error);
-        });
-      return;
-    }
-
-    // Module-resource samples decode through the Valdi asset pipeline
-    // (pixel-exact everywhere); Android R drawables are density-resampled
-    // and unusable for stitch data.
-    if (parseModuleResource(source)) {
-      loadModuleResourceBits(source)
-        .then(bits => {
-          if (this.isDestroyed() || generation !== this.loadGeneration) {
-            return;
-          }
-          if (bits) {
-            this.applyBits(bits, fileName, userSelected);
-            return;
-          }
-          this.applyBits(getBits(source), fileName, userSelected);
-        })
-        .catch((error: unknown) => {
-          console.error("Failed to load sample:", error);
         });
       return;
     }
@@ -219,6 +276,8 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
       return;
     }
 
+    const memos = this.extractMemos(event);
+
     if (typeof getBitsAsync !== "undefined" && getBitsAsync && event.dataUrl) {
       const generation = this.loadGeneration;
       getBitsAsync(event.dataUrl)
@@ -226,7 +285,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
           if (this.isDestroyed() || generation !== this.loadGeneration) {
             return;
           }
-          this.applyBits(bits, fileName, true);
+          this.applyBits(bits, fileName, true, memos);
         })
         .catch((error: unknown) => {
           console.error("Failed to load image:", error);
@@ -235,7 +294,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     }
 
     try {
-      this.applyBits(getBits(loadPath), fileName, true);
+      this.applyBits(getBits(loadPath), fileName, true, memos);
     } catch (error) {
       console.error("Failed to load image:", error);
     }

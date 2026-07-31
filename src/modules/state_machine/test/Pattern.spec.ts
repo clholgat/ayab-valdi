@@ -25,6 +25,27 @@ function bitIsSet(data: Uint8Array, bitIndex: number): boolean {
   return ((data[Math.floor(bitIndex / 8)]! >> (bitIndex % 8)) & 1) !== 0;
 }
 
+describe("Pattern memos", () => {
+  it("defaults to an empty list when none is given", () => {
+    const pattern = makePattern(4, 2);
+    expect(pattern.memos).toEqual([]);
+  });
+
+  it("stores the row memos passed to the constructor", () => {
+    const image = new PatternImage([solidRow(4, new Uint8Array([0, 0, 0, 255]))], 4, 1, 2);
+    const pattern = new Pattern(image, 2, ["3", "0"]);
+    expect(pattern.memos).toEqual(["3", "0"]);
+  });
+
+  it("copy() carries memos over from the source pattern", () => {
+    const source = makePattern(4, 2);
+    source.memos = ["1", "2"];
+    const target = makePattern(4, 2);
+    target.copy(source);
+    expect(target.memos).toEqual(["1", "2"]);
+  });
+});
+
 describe("Pattern", () => {
   it("calcPatStartEndNeedles left-aligns to knit window start", () => {
     const pattern = makePattern(40, 3);

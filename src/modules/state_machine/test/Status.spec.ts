@@ -27,10 +27,20 @@ describe("Status", () => {
     status.currentRow = 5;
     status.color = 2;
     status.carriageType = Carriage.Garter;
+    status.rowMemo = "7";
     status.reset();
     expect(status.currentRow).toBe(-1);
     expect(status.color).toBe(-1);
     expect(status.carriageType as Carriage).toBe(Carriage.Unknown);
+    expect(status.rowMemo).toBe("0");
+  });
+
+  it("copy carries rowMemo over (ayab-desktop#779)", () => {
+    const source = new Status();
+    source.rowMemo = "4";
+    const target = new Status();
+    target.copy(source);
+    expect(target.rowMemo).toBe("4");
   });
 
   it("parseDeviceState parses API6 device message (port test_status.py)", () => {

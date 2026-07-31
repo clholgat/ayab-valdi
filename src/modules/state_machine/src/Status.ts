@@ -84,6 +84,8 @@ export class Status {
   currentRow: number = -1;
   firmwareState: number = -1;
   lineNumber: number = -1;
+  /** Per-row memo digit for the current row ("0" = none), ayab-desktop#779. */
+  rowMemo: string = "0";
   repeats: number = -1;
   totalRows: number = -1;
   carriageDirection: Direction = Direction.Unknown;
@@ -109,6 +111,7 @@ export class Status {
     this.currentRow = -1;
     this.firmwareState = -1;
     this.lineNumber = -1;
+    this.rowMemo = "0";
     this.repeats = -1;
     this.totalRows = -1;
     this.carriageDirection = Direction.Unknown;
@@ -131,6 +134,7 @@ export class Status {
     this.currentRow = status.currentRow;
     this.firmwareState = status.firmwareState;
     this.lineNumber = status.lineNumber;
+    this.rowMemo = status.rowMemo;
     this.repeats = status.repeats;
     this.totalRows = status.totalRows;
     this.carriageDirection = status.carriageDirection;

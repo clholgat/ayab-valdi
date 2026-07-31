@@ -3,6 +3,7 @@ import { Machine } from "state_machine/src/Machine";
 import { Alignment, Mode } from "constants/src/StateMachineConstants";
 import {
   buildRepeatedImageState,
+  rowMemosForTransform,
   settingsForLoadedImage,
 } from "ayab_valdi/src/AppImageLogic";
 
@@ -44,6 +45,50 @@ describe("buildRepeatedImageState", () => {
     const result = buildRepeatedImageState([], 1, 1, 0);
     expect(result.imageWidth).toBe(0);
     expect(result.imageHeight).toBe(0);
+  });
+
+  it("carries source row memos through unchanged with no stretch/repeat", () => {
+    const source = makeBits(2, 3);
+    const result = buildRepeatedImageState(source, 1, 1, 0, 1, 1, ["2", "0"]);
+    expect(result.sourceRowMemos).toEqual(["2", "0"]);
+    expect(result.rowMemos).toEqual(["2", "0"]);
+  });
+
+  it("tiles row memos alongside vertical repeat, matching transforms.py's repeat()", () => {
+    const source = makeBits(2, 3);
+    const result = buildRepeatedImageState(source, 1, 3, 0, 1, 1, ["2", "0"]);
+    expect(result.rowMemos).toEqual(["2", "0", "2", "0", "2", "0"]);
+  });
+
+  it("drops row memos on vertical stretch, matching transforms.py's stretch()", () => {
+    const source = makeBits(2, 3);
+    const result = buildRepeatedImageState(source, 1, 1, 0, 1, 2, ["2", "0"]);
+    expect(result.rowMemos).toEqual([]);
+  });
+
+  it("defaults to no row memos when none are given", () => {
+    const source = makeBits(2, 3);
+    const result = buildRepeatedImageState(source, 1, 1, 0);
+    expect(result.sourceRowMemos).toEqual([]);
+    expect(result.rowMemos).toEqual([]);
+  });
+});
+
+describe("rowMemosForTransform", () => {
+  it("is a no-op at repeatV=1, stretchV=1", () => {
+    expect(rowMemosForTransform(["4", "0"], 1, 1)).toEqual(["4", "0"]);
+  });
+
+  it("tiles by repeatV", () => {
+    expect(rowMemosForTransform(["4"], 2, 1)).toEqual(["4", "4"]);
+  });
+
+  it("clears when vertically stretched", () => {
+    expect(rowMemosForTransform(["4", "0"], 1, 3)).toEqual([]);
+  });
+
+  it("stays empty when there is nothing to tile", () => {
+    expect(rowMemosForTransform([], 5, 1)).toEqual([]);
   });
 });
 

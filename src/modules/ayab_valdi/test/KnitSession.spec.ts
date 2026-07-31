@@ -36,6 +36,31 @@ describe("KnitSession", () => {
     expect(pattern.pattern.image[1]).toBe(topRow);
   });
 
+  it("buildPattern threads rowMemos onto the built Pattern (ayab-desktop#779)", () => {
+    const bits = [[new Uint8Array([255, 0, 0, 255])]];
+    const pattern = KnitSession.buildPattern({
+      imageBits: bits,
+      imageWidth: 1,
+      imageHeight: 1,
+      rowMemos: ["6"],
+      settings,
+      preferences: new Preferences(),
+    });
+    expect(pattern.memos).toEqual(["6"]);
+  });
+
+  it("buildPattern defaults to no memos when rowMemos is omitted", () => {
+    const bits = [[new Uint8Array([255, 0, 0, 255])]];
+    const pattern = KnitSession.buildPattern({
+      imageBits: bits,
+      imageWidth: 1,
+      imageHeight: 1,
+      settings,
+      preferences: new Preferences(),
+    });
+    expect(pattern.memos).toEqual([]);
+  });
+
   it("tryStart rejects invalid configuration", () => {
     const bits = prepareImageBitsForKnit([
       [new Uint8Array([0, 0, 0, 255])],

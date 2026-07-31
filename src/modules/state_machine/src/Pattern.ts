@@ -53,8 +53,10 @@ export class Pattern {
   knitPalette: number[];
   knitAlignment: Alignment;
   knitMode: Mode;
+  /** Per-row memo digits ("0" = none), ayab-desktop#779. Indexed by pat_row. */
+  memos: string[];
 
-  constructor(image: PatternImage, numColors: number = 2) {
+  constructor(image: PatternImage, numColors: number = 2, memos: string[] = []) {
     this.width = 0;
     this.height = 0;
     this.colors = 0;
@@ -66,6 +68,7 @@ export class Pattern {
     this.endPixel = 0;
     this.repeats = 0;
     this.pattern = image;
+    this.memos = memos;
     // Initialize array properties
     this.patternColors = new Uint8Array();
     this.patternExpanded = new Uint8Array();
@@ -258,6 +261,7 @@ export class Pattern {
     this.endNeedle = pattern.endNeedle;
     this.startRow = pattern.startRow;
     this.endRow = pattern.endRow;
+    this.memos = pattern.memos;
   }
 
   parse(data: Uint8Array) {

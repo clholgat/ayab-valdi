@@ -85,6 +85,11 @@ function resolveMachineWidth(status: Status): number {
   return 200;
 }
 
+/** Row memo (ayab-desktop#779) label, or undefined when the row has none. */
+function rowMemoLabel(status: Status): string | undefined {
+  return status.rowMemo !== "0" ? `Memo: ${status.rowMemo}` : undefined;
+}
+
 function snapshotFromStatus(
   status: Status,
   title: string,
@@ -94,6 +99,7 @@ function snapshotFromStatus(
     currentRow: status.currentRow,
     title,
     detail,
+    memo: rowMemoLabel(status),
     bits: new Uint8Array(status.bits),
     knitStartNeedle: status.knitStartNeedle >= 0 ? status.knitStartNeedle : 0,
     knitNeedleCount: resolveNeedleCount(status),
@@ -224,6 +230,7 @@ export class ProgressAndStatus extends StatefulComponent<
         <KnitProgressRow
           title={current.title}
           detail={current.detail}
+          memo={current.memo}
           bits={current.bits}
           knitStartNeedle={current.knitStartNeedle}
           knitNeedleCount={current.knitNeedleCount}
@@ -241,6 +248,7 @@ export class ProgressAndStatus extends StatefulComponent<
           <KnitProgressRow
             title={this.state.completedRow.title}
             detail={this.state.completedRow.detail}
+            memo={this.state.completedRow.memo}
             bits={this.state.completedRow.bits}
             knitStartNeedle={this.state.completedRow.knitStartNeedle}
             knitNeedleCount={this.state.completedRow.knitNeedleCount}

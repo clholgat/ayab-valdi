@@ -3,6 +3,7 @@ import { buildRepeatedImageState, RepeatedImageState } from "./AppImageLogic";
 
 export interface AppImageHandlerState {
   sourceImageBits?: Uint8Array[][];
+  sourceRowMemos?: string[];
   stretchH: number;
   stretchV: number;
   repeatH: number;
@@ -15,6 +16,7 @@ export interface AppImageHandlers {
     bits: Uint8Array[][],
     width: number,
     height: number,
+    memos?: string[],
   ) => RepeatedImageState;
   handleStretchChange: (
     stretchH: number,
@@ -33,14 +35,20 @@ export interface AppImageHandlers {
 export function createAppImageHandlers(
   getState: () => AppImageHandlerState,
 ): AppImageHandlers {
+  /**
+   * `preservesMemos` mirrors transforms.py: invert/hflip don't reorder rows
+   * so memos still line up afterward; vflip/rotateLeft do, and Python drops
+   * memos rather than guess a new mapping.
+   */
   const applyTransform = (
     transform: (bits: Uint8Array[][]) => Uint8Array[][],
+    preservesMemos: boolean,
   ): RepeatedImageState | null => {
     const source = getState().sourceImageBits;
     if (!source) {
       return null;
     }
-    const { stretchH, stretchV, repeatH, repeatV, imageBitsRevision } =
+    const { stretchH, stretchV, repeatH, repeatV, imageBitsRevision, sourceRowMemos } =
       getState();
     return buildRepeatedImageState(
       transform(source),
@@ -49,15 +57,16 @@ export function createAppImageHandlers(
       imageBitsRevision,
       stretchH,
       stretchV,
+      preservesMemos ? sourceRowMemos ?? [] : [],
     );
   };
 
   return {
-    handleBitsLoaded: (bits, width, height) => {
+    handleBitsLoaded: (bits, width, height, memos = []) => {
       void width;
       void height;
       const { imageBitsRevision } = getState();
-      return buildRepeatedImageState(bits, 1, 1, imageBitsRevision, 1, 1);
+      return buildRepeatedImageState(bits, 1, 1, imageBitsRevision, 1, 1, memos);
     },
 
     handleStretchChange: (stretchH, stretchV) => {
@@ -65,7 +74,7 @@ export function createAppImageHandlers(
       if (!source) {
         return null;
       }
-      const { repeatH, repeatV, imageBitsRevision } = getState();
+      const { repeatH, repeatV, imageBitsRevision, sourceRowMemos } = getState();
       return buildRepeatedImageState(
         source,
         repeatH,
@@ -73,6 +82,7 @@ export function createAppImageHandlers(
         imageBitsRevision,
         stretchH,
         stretchV,
+        sourceRowMemos ?? [],
       );
     },
 
@@ -81,7 +91,7 @@ export function createAppImageHandlers(
       if (!source) {
         return null;
       }
-      const { stretchH, stretchV, imageBitsRevision } = getState();
+      const { stretchH, stretchV, imageBitsRevision, sourceRowMemos } = getState();
       return buildRepeatedImageState(
         source,
         repeatH,
@@ -89,12 +99,13 @@ export function createAppImageHandlers(
         imageBitsRevision,
         stretchH,
         stretchV,
+        sourceRowMemos ?? [],
       );
     },
 
-    handleFlipH: () => applyTransform(hflip),
-    handleFlipV: () => applyTransform(vflip),
-    handleRotateLeft: () => applyTransform(rotateLeft),
-    handleInvert: () => applyTransform(invert),
+    handleFlipH: () => applyTransform(hflip, true),
+    handleFlipV: () => applyTransform(vflip, false),
+    handleRotateLeft: () => applyTransform(rotateLeft, false),
+    handleInvert: () => applyTransform(invert, true),
   };
 }

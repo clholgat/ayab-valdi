@@ -437,6 +437,7 @@ export class Control implements IControl {
     this.status.totalRows = this.pat_height;
     this.status.currentRow = this.pat_row + 1;
     this.status.lineNumber = line_number;
+    this.status.rowMemo = this.pattern?.memos?.[this.pat_row] ?? "0";
     if (this.inf_repeat) {
       this.status.repeats = this.pattern_repeats;
     }

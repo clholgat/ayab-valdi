@@ -27,6 +27,7 @@ import {
 import { APP_BACKGROUND } from "constants/src/UiTheme";
 import { BUTTON_FONT_SMALL } from "constants/src/Typography";
 import { PreviewPanel } from "./PreviewPanel";
+import { PatternLoadInfo } from "preview/src/Preview";
 import { ValueNotifier } from "./ValueNotifier";
 import {
   AudioFeedbackSink,
@@ -104,6 +105,10 @@ interface State {
   imageHeight?: number;
   /** Pattern before repeat tiling — updated when preview loads or transforms. */
   sourceImageBits?: Uint8Array[][];
+  /** Row memos (ayab-desktop#779) aligned to sourceImageBits, pre-transform. */
+  sourceRowMemos?: string[];
+  /** Row memos aligned to imageBits, post-transform — see rowMemosForTransform. */
+  rowMemos?: string[];
   stretchH: number;
   stretchV: number;
   repeatH: number;
@@ -271,9 +276,10 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     bits: Uint8Array[][],
     width: number,
     height: number,
+    info?: PatternLoadInfo,
   ): void => {
     this.setState({
-      ...this.imageHandlers.handleBitsLoaded(bits, width, height),
+      ...this.imageHandlers.handleBitsLoaded(bits, width, height, info?.memos),
       // Snap the needle window to the new image (host-owned so it works even
       // when no ImageSettings panel is mounted, e.g. compact layouts).
       currentImageSettings: settingsForLoadedImage(
@@ -794,6 +800,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
         imageBits: this.state.imageBits,
         imageWidth: this.state.imageWidth,
         imageHeight: this.state.imageHeight,
+        rowMemos: this.state.rowMemos,
         preferences: this.state.preferences,
         serialPort: this.state.selectedSerialPort,
         audio: this.audioSink,
