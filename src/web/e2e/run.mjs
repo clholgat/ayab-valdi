@@ -10,6 +10,7 @@ import { simulationKnitSpec } from "./specs/simulation-knit.mjs";
 import { hardwareTestSpec } from "./specs/hardware-test.mjs";
 import { loadImageSpec } from "./specs/load-image.mjs";
 import { annotatedImageSpec } from "./specs/annotated-image.mjs";
+import { machineJobImportSpec } from "./specs/machine-job-import.mjs";
 import { settingsSpec } from "./specs/settings.mjs";
 import { firstRunTourSpec } from "./specs/first-run-tour.mjs";
 import { previewTransformsSpec } from "./specs/preview-transforms.mjs";
@@ -33,6 +34,7 @@ const allSpecs = [
   { name: "smoke", fn: smokeSpec },
   { name: "load-image", fn: loadImageSpec },
   { name: "annotated-image", fn: annotatedImageSpec },
+  { name: "machine-job-import", fn: machineJobImportSpec },
   { name: "load-pat", fn: loadPatSpec },
   { name: "validation", fn: validationSpec },
   { name: "simulation-knit", fn: simulationKnitSpec },

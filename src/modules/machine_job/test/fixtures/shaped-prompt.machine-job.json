@@ -1,0 +1,33 @@
+{
+  "formatVersion": "1.0",
+  "jobId": "golden-shaped-prompt",
+  "title": "Shaped swatch with prompt",
+  "coordinateSystem": "zeroBasedNeedleIndex",
+  "requirements": { "minNeedle": 0, "maxNeedle": 3, "techniques": ["stockinette"] },
+  "yarns": [{ "id": "main", "name": "Main yarn" }],
+  "rows": [
+    {
+      "rowNumber": 1,
+      "promptsBefore": [
+        {
+          "id": "shape-row-1",
+          "kind": "shape",
+          "severity": "warning",
+          "text": "Decrease one stitch at each edge.",
+          "acknowledgementRequired": true
+        }
+      ],
+      "passes": [
+        {
+          "passId": "row-1-pass-1",
+          "direction": "either",
+          "activeNeedles": { "left": 1, "right": 2 },
+          "selection": { "encoding": "indices", "indices": [1, 2] },
+          "yarnIds": ["main"],
+          "technique": "stockinette"
+        }
+      ],
+      "promptsAfter": []
+    }
+  ]
+}

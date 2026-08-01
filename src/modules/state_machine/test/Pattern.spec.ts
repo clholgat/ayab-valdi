@@ -123,4 +123,45 @@ describe("Pattern", () => {
       expect(bitIsSet(color1Row, i)).toBe(true);
     }
   });
+
+  it("stores prepacked singlebed rows without changing their bytes", () => {
+    const pattern = makePattern(10, 1);
+    pattern.setPrepackedSingleBedRows(
+      [new Uint8Array([0x01, 0x03]), new Uint8Array([0x02, 0x01])],
+      10,
+    );
+    expect(pattern.hasPrepackedSingleBedRows()).toBeTrue();
+    expect(pattern.width).toBe(10);
+    expect(pattern.height).toBe(2);
+    expect(Array.from(pattern.patternExpanded)).toEqual([
+      0x01,
+      0x03,
+      0x00,
+      0x00,
+      0x02,
+      0x01,
+      0x00,
+      0x00,
+    ]);
+  });
+
+  it("stores and validates per-row active bounds for shaped jobs", () => {
+    const pattern = makePattern(10, 1);
+    pattern.setPrepackedSingleBedRows(
+      [new Uint8Array([0x01, 0x00]), new Uint8Array([0x02, 0x00])],
+      10,
+      [{ left: 0, right: 9 }, { left: 2, right: 7 }],
+    );
+    expect(pattern.getPrepackedActiveNeedleBounds(1)).toEqual({
+      left: 2,
+      right: 7,
+    });
+    expect(() =>
+      pattern.setPrepackedSingleBedRows(
+        [new Uint8Array([0x01, 0x00])],
+        10,
+        [{ left: 3, right: 10 }],
+      ),
+    ).toThrow();
+  });
 });

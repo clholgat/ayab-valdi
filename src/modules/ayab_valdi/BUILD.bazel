@@ -25,6 +25,8 @@ valdi_module(
         "@valdi_widgets//valdi_modules/valdi_standalone_ui",
         "//modules/preview",
         "//modules/image_settings",
+        "//modules/machine_job",
+        "//modules/knit_session",
         "//modules/app_settings",
         "//modules/serial",
         "//modules/state_machine",

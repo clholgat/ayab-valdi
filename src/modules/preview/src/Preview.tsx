@@ -1,11 +1,33 @@
 import { StatefulComponent } from "valdi_core/src/Component";
 import { Label, View, Layout } from "valdi_tsx/src/NativeTemplateElements";
-import { sansFont, BUTTON_FONT_SMALL } from "constants/src/Typography";
+import {
+  sansBoldFont,
+  sansFont,
+  BUTTON_FONT_SMALL,
+} from "constants/src/Typography";
 import {
   NEEDLE_BAR_GREEN,
   NEEDLE_BAR_ORANGE,
 } from "constants/src/NeedleColors";
 import { TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from "constants/src/UiTheme";
+import { MachineCapabilities } from "machine_job/src/MachineCapabilities";
+import {
+  InspectMachineJobResult,
+  inspectMachineJob,
+} from "machine_job/src/InspectMachineJob";
+import { decodeMachineJobText } from "machine_job/src/MachineJobText";
+import { MachineJob } from "machine_job/src/MachineJobTypes";
+import { machineJobIdentity } from "machine_job/src/MachineJobChecksum";
+import {
+  ExecutionCheckpoint,
+  MachineJobIdentity,
+} from "knit_session/src/ExecutionCheckpoint";
+import { CheckpointRepository } from "knit_session/src/CheckpointRepository";
+import { createDefaultCheckpointStore } from "knit_session/src/PersistentCheckpointStore";
+import {
+  finishCheckpoint,
+  rewindToPass,
+} from "knit_session/src/CheckpointTransitions";
 import { Style } from "valdi_core/src/Style";
 import { Device } from "valdi_core/src/Device";
 import { getBits } from "process_image/src/ProcessImageNative";
@@ -83,6 +105,18 @@ export interface PreviewViewModel {
   syncedBits?: Uint8Array[][];
   /** Highlights the pattern panel during first-run tour. */
   tourHighlighted?: boolean;
+  /** Selected hardware/settings facts used only for read-only job preflight. */
+  machineJobCapabilities?: MachineCapabilities;
+  onSimulateMachineJob?: (
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    resumePassIndex?: number,
+  ) => void;
+  /** Portable job supplied by an embedding app instead of the file picker. */
+  initialMachineJobJson?: string;
+  initialMachineJobFileName?: string;
+  initialMachineJobRevision?: number;
 }
 
 interface State {
@@ -91,18 +125,40 @@ interface State {
   width?: number;
   height?: number;
   samplePickerOpen?: boolean;
+  machineJobFileName?: string;
+  machineJobInspection?: InspectMachineJobResult;
+  machineJobReadError?: string;
+  machineJobIdentity?: MachineJobIdentity;
+  machineJobCheckpoint?: ExecutionCheckpoint;
+  machineJobRecoveryLoading?: boolean;
+  machineJobRecoveryError?: string;
 }
 
 export class Preview extends StatefulComponent<PreviewViewModel, State> {
   state: State = {};
 
   private loadGeneration = 0;
+  private machineJobLoadGeneration = 0;
+  private readonly checkpointRepository = new CheckpointRepository(
+    createDefaultCheckpointStore(),
+    "active",
+  );
+
+  onCreate(): void {
+    this.loadInitialMachineJob();
+  }
 
   onDestroy(): void {
     this.loadGeneration++;
+    this.machineJobLoadGeneration++;
   }
 
   onViewModelUpdate(previous?: PreviewViewModel): void {
+    if (
+      this.viewModel.initialMachineJobRevision !== previous?.initialMachineJobRevision
+    ) {
+      this.loadInitialMachineJob();
+    }
     const revision = this.viewModel.imageBitsRevision;
     if (
       revision == null ||
@@ -115,6 +171,15 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     const height = bits.length;
     const width = height > 0 ? bits[0]!.length : 0;
     this.setState({ bits, width, height });
+  }
+
+  private loadInitialMachineJob(): void {
+    const json = this.viewModel.initialMachineJobJson;
+    if (json === undefined) return;
+    this.handleMachineJobSelect({
+      text: json,
+      fileName: this.viewModel.initialMachineJobFileName ?? "Machine job",
+    });
   }
 
   private loadSamplePattern(sample: SamplePattern): void {
@@ -299,6 +364,202 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     }
   };
 
+  private handleMachineJobSelect = (event: FilePickerOnSelectEvent): void => {
+    const generation = ++this.machineJobLoadGeneration;
+    const fileName = event.fileName ?? "Machine job";
+    const capabilities = this.viewModel.machineJobCapabilities;
+    if (event.text === undefined && !event.dataUrl && !event.path) return;
+    if (!capabilities) {
+      this.setState({
+        machineJobFileName: fileName,
+        machineJobInspection: undefined,
+        machineJobIdentity: undefined,
+        machineJobCheckpoint: undefined,
+        machineJobRecoveryLoading: false,
+        machineJobRecoveryError: undefined,
+        machineJobReadError: "Select a machine configuration before inspecting this job.",
+      });
+      return;
+    }
+    try {
+      let json: string;
+      if (event.text !== undefined) {
+        json = event.text;
+      } else {
+        let bytes: Uint8Array;
+        if (event.dataUrl) {
+          bytes = dataUrlToBytes(event.dataUrl);
+        } else if (event.path && typeof readFileBytes === "function") {
+          bytes = readFileBytes(event.path);
+        } else {
+          throw new Error("Machine job contents are unavailable from the file picker.");
+        }
+        json = decodeMachineJobText(bytes);
+      }
+      if (json.length === 0) throw new Error("Machine job file is empty.");
+      const inspection = inspectMachineJob(json, capabilities);
+      this.setState({
+        machineJobFileName: fileName,
+        machineJobInspection: inspection,
+        machineJobIdentity: inspection.ok
+          ? machineJobIdentity(inspection.job.jobId, json)
+          : undefined,
+        machineJobCheckpoint: undefined,
+        machineJobRecoveryLoading: inspection.ok,
+        machineJobRecoveryError: undefined,
+        machineJobReadError: undefined,
+      });
+      if (inspection.ok) {
+        const identity = machineJobIdentity(inspection.job.jobId, json);
+        void this.loadMachineJobRecovery(
+          inspection.job,
+          identity,
+          capabilities.profileId,
+          generation,
+        );
+      }
+    } catch (error) {
+      this.setState({
+        machineJobFileName: fileName,
+        machineJobInspection: undefined,
+        machineJobIdentity: undefined,
+        machineJobCheckpoint: undefined,
+        machineJobRecoveryLoading: false,
+        machineJobRecoveryError: undefined,
+        machineJobReadError:
+          error instanceof Error ? error.message : "Could not read machine job.",
+      });
+    }
+  };
+
+  private async loadMachineJobRecovery(
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    generation: number,
+  ): Promise<void> {
+    try {
+      const loaded = await this.checkpointRepository.load({
+        identity,
+        machineProfileId: profileId,
+        passIds: job.rows.flatMap((row) => row.passes.map((pass) => pass.passId)),
+      });
+      if (
+        this.isDestroyed() ||
+        generation !== this.machineJobLoadGeneration
+      ) {
+        return;
+      }
+      this.setState({
+        machineJobCheckpoint: loaded.ok ? loaded.checkpoint : undefined,
+        machineJobRecoveryLoading: false,
+        machineJobRecoveryError: undefined,
+      });
+    } catch (error) {
+      console.error("Failed to inspect machine-job checkpoint:", error);
+      if (
+        !this.isDestroyed() &&
+        generation === this.machineJobLoadGeneration
+      ) {
+        this.setState({
+          machineJobCheckpoint: undefined,
+          machineJobRecoveryLoading: false,
+          machineJobRecoveryError: "Could not read saved recovery state.",
+        });
+      }
+    }
+  }
+
+  private handleSimulateMachineJob = (): void => {
+    this.startMachineJobSimulation(undefined);
+  };
+
+  private handleResumeMachineJob = (): void => {
+    this.startMachineJobSimulation(
+      this.state.machineJobCheckpoint?.nextPassIndex,
+    );
+  };
+
+  private handleDiscardMachineJob = (): void => {
+    void this.updateMachineJobRecovery("discard");
+  };
+
+  private handleRewindMachineJob = (): void => {
+    void this.updateMachineJobRecovery("rewind");
+  };
+
+  private async updateMachineJobRecovery(
+    action: "discard" | "rewind",
+  ): Promise<void> {
+    const checkpoint = this.state.machineJobCheckpoint;
+    const inspection = this.state.machineJobInspection;
+    if (!checkpoint || !inspection?.ok) return;
+    const generation = this.machineJobLoadGeneration;
+    this.setState({
+      machineJobRecoveryLoading: true,
+      machineJobRecoveryError: undefined,
+    });
+    try {
+      let next: ExecutionCheckpoint;
+      if (action === "discard") {
+        next = finishCheckpoint(
+          checkpoint,
+          "cancelled",
+          new Date().toISOString(),
+        );
+      } else {
+        const target = checkpoint.nextPassIndex - 1;
+        if (target < 0) throw new Error("No completed pass is available to rewind.");
+        const passes = inspection.job.rows.flatMap((row) => row.passes);
+        const targetDirection = passes[target]!.direction;
+        const expectedSide =
+          targetDirection === "rightToLeft" ? "right" : "left";
+        next = rewindToPass(
+          checkpoint,
+          target,
+          target > 0 ? passes[target - 1]!.passId : undefined,
+          expectedSide,
+          new Date().toISOString(),
+        );
+      }
+      await this.checkpointRepository.save(next);
+      if (this.isDestroyed() || generation !== this.machineJobLoadGeneration) {
+        return;
+      }
+      this.setState({
+        machineJobCheckpoint: action === "discard" ? undefined : next,
+        machineJobRecoveryLoading: false,
+      });
+    } catch (error) {
+      console.error(`Failed to ${action} machine-job recovery:`, error);
+      if (!this.isDestroyed() && generation === this.machineJobLoadGeneration) {
+        this.setState({
+          machineJobRecoveryLoading: false,
+          machineJobRecoveryError: `Could not ${action} saved progress.`,
+        });
+      }
+    }
+  }
+
+  private startMachineJobSimulation(resumePassIndex: number | undefined): void {
+    const inspection = this.state.machineJobInspection;
+    const capabilities = this.viewModel.machineJobCapabilities;
+    if (
+      inspection?.ok &&
+      this.state.machineJobIdentity &&
+      capabilities &&
+      inspection.preflight.compatible &&
+      this.viewModel.isKnitting !== true
+    ) {
+      this.viewModel.onSimulateMachineJob?.(
+        inspection.job,
+        this.state.machineJobIdentity,
+        capabilities.profileId,
+        resumePassIndex,
+      );
+    }
+  }
+
   private loadPatternFile = (
     event: FilePickerOnSelectEvent,
     fileName: string,
@@ -376,6 +637,17 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
                 font={BUTTON_FONT_SMALL}
               />
             </layout>
+            <layout style={styles.filePickerRow}>
+              <label style={styles.openPatternLabel} value="Open machine job" />
+              <layout style={styles.filePickerWrapNoButton}>
+                <FilePicker
+                  accept="application/json,.json,.machine-job.json"
+                  readContent={Device.isWeb()}
+                  onSelect={this.handleMachineJobSelect}
+                />
+              </layout>
+            </layout>
+            {this.renderMachineJobInspection()}
             {this.state.selectedImageName ? (
               <view accessibilityId="preview-image-name">
                 <label
@@ -462,6 +734,133 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
       ) : undefined}
     </view>;
   }
+
+  private renderMachineJobInspection(): void {
+    const inspection = this.state.machineJobInspection;
+    const readError = this.state.machineJobReadError;
+    if (!inspection && !readError) return;
+
+    if (readError) {
+      <view accessibilityId="machine-job-inspection" style={styles.jobCard}>
+        <label style={styles.jobTitle} value={this.state.machineJobFileName ?? "Machine job"} />
+        <label style={styles.jobError} value={readError} />
+      </view>;
+      return;
+    }
+    if (!inspection!.ok) {
+      const first = inspection!.issues[0];
+      <view accessibilityId="machine-job-inspection" style={styles.jobCard}>
+        <label style={styles.jobTitle} value={this.state.machineJobFileName ?? "Machine job"} />
+        <label
+          style={styles.jobError}
+          value={`Invalid job: ${first?.path ?? "$"} ${first?.message ?? "failed validation"}`}
+        />
+      </view>;
+      return;
+    }
+    const result = inspection!;
+    const summary = result.preflight.summary;
+    const status = result.preflight.compatible
+      ? "Compatible with selected machine"
+      : `${result.preflight.issues.length} compatibility issue${result.preflight.issues.length === 1 ? "" : "s"}`;
+    const checkpoint = this.state.machineJobCheckpoint;
+    <view accessibilityId="machine-job-inspection" style={styles.jobCard}>
+      <label style={styles.jobTitle} value={result.job.title} />
+      <label
+        accessibilityId="machine-job-summary"
+        style={styles.jobMeta}
+        value={`${summary.logicalRows} rows · ${summary.passes} passes · ${summary.yarns} yarns · needles ${summary.minNeedle}–${summary.maxNeedle}`}
+      />
+      <label
+        accessibilityId="machine-job-compatibility"
+        style={result.preflight.compatible ? styles.jobCompatible : styles.jobError}
+        value={status}
+      />
+      {!result.preflight.compatible ? (
+        <label
+          style={styles.jobMeta}
+          value={result.preflight.issues[0]!.message}
+        />
+      ) : undefined}
+      {result.preflight.compatible && this.viewModel.onSimulateMachineJob ? (
+        <layout style={styles.jobAction}>
+          {checkpoint ? (
+            <CoreButton
+              accessibilityId="machine-job-resume"
+              text={`Resume at pass ${checkpoint.nextPassIndex + 1}`}
+              onTap={this.handleResumeMachineJob}
+              disabled={
+                this.viewModel.isKnitting === true ||
+                this.state.machineJobRecoveryLoading === true
+              }
+              coloring={CoreButtonColoring.PRIMARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
+            />
+          ) : undefined}
+          {checkpoint && checkpoint.nextPassIndex > 0 ? (
+            <CoreButton
+              accessibilityId="machine-job-rewind"
+              text="Rewind one pass"
+              onTap={this.handleRewindMachineJob}
+              disabled={
+                this.viewModel.isKnitting === true ||
+                this.state.machineJobRecoveryLoading === true
+              }
+              coloring={CoreButtonColoring.SECONDARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
+            />
+          ) : undefined}
+          {checkpoint ? (
+            <CoreButton
+              accessibilityId="machine-job-discard"
+              text="Discard progress"
+              onTap={this.handleDiscardMachineJob}
+              disabled={
+                this.viewModel.isKnitting === true ||
+                this.state.machineJobRecoveryLoading === true
+              }
+              coloring={CoreButtonColoring.TERTIARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
+            />
+          ) : undefined}
+          <CoreButton
+            accessibilityId="machine-job-simulate"
+            text={
+              this.viewModel.isKnitting
+                ? "Simulation running"
+                : checkpoint
+                  ? "Restart simulation"
+                  : "Simulate job"
+            }
+            onTap={this.handleSimulateMachineJob}
+            disabled={this.viewModel.isKnitting === true}
+            coloring={CoreButtonColoring.SECONDARY}
+            sizing={CoreButtonSizing.SMALL}
+            font={BUTTON_FONT_SMALL}
+          />
+        </layout>
+      ) : undefined}
+      {this.state.machineJobRecoveryLoading ? (
+        <label style={styles.jobMeta} value="Checking recovery state…" />
+      ) : checkpoint ? (
+        <label
+          accessibilityId="machine-job-recovery"
+          style={styles.jobMeta}
+          value={`${checkpoint.nextPassIndex} of ${summary.passes} passes safely completed`}
+        />
+      ) : undefined}
+      {this.state.machineJobRecoveryError ? (
+        <label
+          accessibilityId="machine-job-recovery-error"
+          style={styles.jobError}
+          value={this.state.machineJobRecoveryError}
+        />
+      ) : undefined}
+    </view>;
+  }
 }
 
 const styles = {
@@ -512,6 +911,46 @@ const styles = {
     minWidth: 0,
     flexDirection: "row",
     marginRight: 8,
+  }),
+  filePickerWrapNoButton: new Style<Layout>({
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    flexDirection: "row",
+  }),
+  jobCard: new Style<View>({
+    width: "100%",
+    flexDirection: "column",
+    padding: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: SIDEBAR_CARD_BORDER,
+    borderRadius: 6,
+  }),
+  jobTitle: new Style<Label>({
+    font: sansBoldFont(13),
+    color: TEXT_PRIMARY,
+  }),
+  jobMeta: new Style<Label>({
+    font: sansFont(12),
+    color: TEXT_SECONDARY,
+    marginTop: 3,
+  }),
+  jobCompatible: new Style<Label>({
+    font: sansBoldFont(12),
+    color: "#15803D",
+    marginTop: 4,
+  }),
+  jobError: new Style<Label>({
+    font: sansBoldFont(12),
+    color: "#B91C1C",
+    marginTop: 4,
+  }),
+  jobAction: new Style<Layout>({
+    width: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: 8,
   }),
   emptyStateBlock: new Style<Layout>({
     width: "100%",

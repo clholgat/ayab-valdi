@@ -1,0 +1,25 @@
+{
+  "formatVersion": "1.0",
+  "jobId": "invalid-unknown-yarn",
+  "title": "Invalid unknown yarn fixture",
+  "coordinateSystem": "zeroBasedNeedleIndex",
+  "requirements": { "minNeedle": 0, "maxNeedle": 3 },
+  "yarns": [{ "id": "main" }],
+  "rows": [
+    {
+      "rowNumber": 1,
+      "promptsBefore": [],
+      "passes": [
+        {
+          "passId": "row-1-pass-1",
+          "direction": "leftToRight",
+          "activeNeedles": { "left": 0, "right": 3 },
+          "selection": { "encoding": "bitmap", "offset": 0, "bits": "1010" },
+          "yarnIds": ["missing"],
+          "technique": "fairIsle"
+        }
+      ],
+      "promptsAfter": []
+    }
+  ]
+}

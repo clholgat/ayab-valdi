@@ -27,6 +27,7 @@ import {
 import { APP_BACKGROUND } from "constants/src/UiTheme";
 import { BUTTON_FONT_SMALL } from "constants/src/Typography";
 import { PreviewPanel } from "./PreviewPanel";
+import { ayabMachineCapabilities } from "./AyabMachineCapabilities";
 import { PatternLoadInfo } from "preview/src/Preview";
 import { ValueNotifier } from "./ValueNotifier";
 import {
@@ -63,9 +64,15 @@ import {
   runAppHardwareTest,
   runAppFlashFirmware,
   runAppKnit,
+  runAppMachineJobSimulation,
   sendAppHardwareTestCommand,
   awaitActiveKnitRun,
 } from "./AppSessions";
+import { MachineJob } from "machine_job/src/MachineJobTypes";
+import { MachineJobIdentity, PassSide } from "knit_session/src/ExecutionCheckpoint";
+import { CheckpointRepository } from "knit_session/src/CheckpointRepository";
+import { MachineJobCheckpointRecorder } from "knit_session/src/MachineJobCheckpointRecorder";
+import { createDefaultCheckpointStore } from "knit_session/src/PersistentCheckpointStore";
 
 /**
  * @ViewModel
@@ -79,7 +86,13 @@ export interface AppViewModel {
    * `syncedBits`/`imageBitsRevision` mechanism.
    */
   initialImageBits?: Uint8Array[][];
+  /** Per-row AYAB memo codes aligned with initialImageBits. */
+  initialImageMemos?: string[];
   initialImageRevision?: number;
+  /** Portable MachineJob supplied by an embedding app. */
+  initialMachineJobJson?: string;
+  initialMachineJobFileName?: string;
+  initialMachineJobRevision?: number;
   /**
    * When false, hides machine-connection UI (serial-port picker, knit
    * footer) so the app serves pattern prep/preview only — e.g. on Android,
@@ -150,6 +163,10 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   private readonly flashProgressNotifier = new ValueNotifier(0);
   private readonly flashLogNotifier = new ValueNotifier("");
   private readonly flashDoneNotifier = new ValueNotifier(false);
+  private readonly machineJobCheckpointRepository = new CheckpointRepository(
+    createDefaultCheckpointStore(),
+    "active",
+  );
   private readonly imageHandlers = createAppImageHandlers(() => ({
     sourceImageBits: this.state.sourceImageBits,
     stretchH: this.state.stretchH,
@@ -177,7 +194,9 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     bits: Uint8Array[][];
     width: number;
     height: number;
+    memos?: string[];
   };
+  private machineJobSimulationActive = false;
 
   state: State = {
     preferences: new Preferences(),
@@ -242,7 +261,11 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     const pending = this.pendingInitialImage;
     if (pending) {
       this.pendingInitialImage = undefined;
-      this.handleBitsLoaded(pending.bits, pending.width, pending.height);
+      this.handleBitsLoaded(pending.bits, pending.width, pending.height, {
+        fileName: "generated-pattern.png",
+        userSelected: false,
+        memos: pending.memos,
+      });
     }
   }
 
@@ -266,10 +289,14 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     const height = bits.length;
     const width = height > 0 ? bits[0]!.length : 0;
     if (!this.preferencesReady) {
-      this.pendingInitialImage = { bits, width, height };
+      this.pendingInitialImage = { bits, width, height, memos: this.viewModel.initialImageMemos };
       return;
     }
-    this.handleBitsLoaded(bits, width, height);
+    this.handleBitsLoaded(bits, width, height, {
+      fileName: "generated-pattern.png",
+      userSelected: false,
+      memos: this.viewModel.initialImageMemos,
+    });
   }
 
   private handleBitsLoaded = (
@@ -386,6 +413,20 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     void this.startKnit();
   };
 
+  private handleSimulateMachineJob = (
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    resumePassIndex?: number,
+  ): void => {
+    void this.startMachineJobSimulation(
+      job,
+      identity,
+      profileId,
+      resumePassIndex,
+    );
+  };
+
   private handleHardwareTestClose = (): void => {
     closeAppHardwareTest(
       this.state.hwTestSession,
@@ -469,9 +510,20 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     if (!this.state.isKnitting || !this.state.knitSession) {
       return;
     }
+    const retainedMachineJobProgress = this.machineJobSimulationActive;
     this.state.knitSession.cancel();
+    this.machineJobSimulationActive = false;
     this.knitStatusNotifier.set(0);
-    this.setState({ isKnitting: false, knitSession: undefined });
+    this.setState({
+      isKnitting: false,
+      knitSession: undefined,
+      userMessage: retainedMachineJobProgress
+        ? {
+            text: "Machine job stopped. Progress was retained for recovery.",
+            level: "info",
+          }
+        : this.state.userMessage,
+    });
     // Wait for the cancelled run (and Web Serial unlock/close) before a new knit.
     void awaitActiveKnitRun();
   };
@@ -745,6 +797,17 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
                 tourStep?.targetId === "checklist-target-pattern"
               }
               tourBubble={tourBubble}
+              machineJobCapabilities={ayabMachineCapabilities({
+                machine,
+                mode:
+                  this.state.currentImageSettings?.mode ??
+                  this.state.preferences.defaultKnittingMode,
+                numColors: this.state.currentImageSettings?.numColors ?? 2,
+              })}
+              onSimulateMachineJob={this.handleSimulateMachineJob}
+              initialMachineJobJson={this.viewModel.initialMachineJobJson}
+              initialMachineJobFileName={this.viewModel.initialMachineJobFileName}
+              initialMachineJobRevision={this.viewModel.initialMachineJobRevision}
             />
           </layout>
           {this.renderInlineSidebar(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble)}
@@ -810,6 +873,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
           this.setState({ userMessage: message });
         },
         onKnitStarted: (knitSession) => {
+          this.machineJobSimulationActive = false;
           this.setState({ isKnitting: true, knitSession });
         },
         onStatusVersion: (version) => {
@@ -835,6 +899,122 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             knitSession: undefined,
             userMessage: {
               text: "An error occurred while knitting.",
+              level: "error",
+            },
+          });
+        },
+        isDestroyed: () => this.isDestroyed(),
+      },
+    );
+  };
+
+  private startMachineJobSimulation = async (
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    requestedResumePassIndex?: number,
+  ): Promise<void> => {
+    const totalPasses = job.rows.reduce(
+      (total, row) => total + row.passes.length,
+      0,
+    );
+    let recorder: MachineJobCheckpointRecorder;
+    try {
+      if (requestedResumePassIndex !== undefined) {
+        const loaded = await this.machineJobCheckpointRepository.load({
+          identity,
+          machineProfileId: profileId,
+          passIds: job.rows.flatMap((row) =>
+            row.passes.map((pass) => pass.passId),
+          ),
+        });
+        if (!loaded.ok) throw new Error(loaded.message);
+        if (loaded.checkpoint.nextPassIndex !== requestedResumePassIndex) {
+          throw new Error("The saved checkpoint changed; import the job again.");
+        }
+        recorder = MachineJobCheckpointRecorder.resume(
+          this.machineJobCheckpointRepository,
+          loaded.checkpoint,
+          totalPasses,
+          () => new Date().toISOString(),
+        );
+      } else {
+        recorder = await MachineJobCheckpointRecorder.start(
+          this.machineJobCheckpointRepository,
+          {
+            identity,
+            machineProfileId: profileId,
+            totalPasses,
+            now: () => new Date().toISOString(),
+          },
+        );
+      }
+    } catch (error) {
+      console.error("Failed to initialize machine-job checkpoint:", error);
+      if (!this.isDestroyed()) {
+        this.setState({
+          userMessage: {
+            text: "Could not create a durable machine-job checkpoint.",
+            level: "error",
+          },
+        });
+      }
+      return;
+    }
+    if (this.isDestroyed()) return;
+
+    const firstDirection =
+      job.rows[0]!.passes[0]!.direction === "rightToLeft"
+        ? "rightToLeft"
+        : "leftToRight";
+    await runAppMachineJobSimulation(
+      job,
+      {
+        isKnitting: this.state.isKnitting,
+        preferences: this.state.preferences,
+        audio: this.audioSink,
+        startPassIndex: requestedResumePassIndex,
+      },
+      {
+        onValidationError: (message) => this.setState({ userMessage: message }),
+        onKnitStarted: (knitSession) => {
+          this.machineJobSimulationActive = true;
+          this.setState({ isKnitting: true, knitSession });
+        },
+        onStatusVersion: (version) => this.knitStatusNotifier.set(version),
+        onFeedback: (message) => {
+          if (!this.isDestroyed()) this.setState({ userMessage: message });
+        },
+        onPassCompleted: async (passIndex, passId) => {
+          const leftToRight =
+            (firstDirection === "leftToRight") === (passIndex % 2 === 0);
+          const expectedSide: PassSide = leftToRight ? "right" : "left";
+          await recorder.recordCompletedPass(
+            passIndex,
+            passId,
+            expectedSide,
+          );
+        },
+        onKnitFinished: () => {
+          this.machineJobSimulationActive = false;
+          this.knitStatusNotifier.set(0);
+          this.setState({
+            isKnitting: false,
+            knitSession: undefined,
+            userMessage: {
+              text: "Machine job simulation completed",
+              level: "success",
+            },
+          });
+        },
+        onKnitRuntimeError: () => {
+          this.machineJobSimulationActive = false;
+          this.knitStatusNotifier.set(0);
+          this.setState({
+            isKnitting: false,
+            knitSession: undefined,
+            userMessage: {
+              text: "An error occurred while simulating the machine job.",
               level: "error",
             },
           });

@@ -14,6 +14,9 @@ import { ActiveTourBubble, InlineTourBubble } from "./InlineTourBubble";
 import { KnitActionBanner } from "./KnitActionBanner";
 import { FeedbackLevel } from "./Feedback";
 import { shouldShowKnitActionBanner } from "./KnitSessionUiLogic";
+import { MachineCapabilities } from "machine_job/src/MachineCapabilities";
+import { MachineJob } from "machine_job/src/MachineJobTypes";
+import { MachineJobIdentity } from "knit_session/src/ExecutionCheckpoint";
 
 export interface PreviewPanelViewModel {
   title: string;
@@ -43,6 +46,16 @@ export interface PreviewPanelViewModel {
   onUserMessageAction?: () => void;
   tourHighlighted?: boolean;
   tourBubble?: ActiveTourBubble | null;
+  machineJobCapabilities?: MachineCapabilities;
+  onSimulateMachineJob?: (
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    resumePassIndex?: number,
+  ) => void;
+  initialMachineJobJson?: string;
+  initialMachineJobFileName?: string;
+  initialMachineJobRevision?: number;
 }
 
 interface PreviewPanelState {
@@ -122,6 +135,11 @@ export class PreviewPanel extends StatefulComponent<
             imageBitsRevision={vm.imageBitsRevision}
             syncedBits={vm.syncedBits}
             tourHighlighted={vm.tourHighlighted}
+            machineJobCapabilities={vm.machineJobCapabilities}
+            onSimulateMachineJob={vm.onSimulateMachineJob}
+            initialMachineJobJson={vm.initialMachineJobJson}
+            initialMachineJobFileName={vm.initialMachineJobFileName}
+            initialMachineJobRevision={vm.initialMachineJobRevision}
           />
         </layout>
       </layout>

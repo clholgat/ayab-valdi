@@ -271,4 +271,43 @@ describe("KnitSession", () => {
 
     expect(feedbackMessages).toEqual([]);
   });
+
+  it("awaits a pass checkpoint and stops when persistence fails", async () => {
+    const bits = prepareImageBitsForKnit([
+      [new Uint8Array([0, 0, 0, 255])],
+    ]);
+    const start = KnitSession.tryStart({
+      imageBits: bits,
+      imageWidth: 1,
+      imageHeight: 1,
+      settings,
+      preferences: new Preferences(),
+      serialPort: "Simulation",
+    });
+    expect(start.ok).toBeTrue();
+    if (!start.ok) return;
+    const session = start.session;
+    (session.control as any).operate_async = () => {
+      session.control.status.currentRow = 1;
+      return Promise.resolve(Output.NONE);
+    };
+
+    let checkpointCalls = 0;
+    let rejected = false;
+    try {
+      await session.run({
+        onStatusVersion: () => {},
+        isDestroyed: () => false,
+        onPassCompleted: () => {
+          checkpointCalls += 1;
+          return Promise.reject(new Error("checkpoint write failed"));
+        },
+      });
+    } catch (error) {
+      rejected =
+        error instanceof Error && error.message === "checkpoint write failed";
+    }
+    expect(rejected).toBeTrue();
+    expect(checkpointCalls).toBe(1);
+  });
 });

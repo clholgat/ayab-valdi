@@ -1,0 +1,26 @@
+{
+  "formatVersion": "1.0",
+  "jobId": "golden-fixed-two-color",
+  "title": "Fixed two-color swatch",
+  "coordinateSystem": "zeroBasedNeedleIndex",
+  "source": { "producer": "AYAB golden fixtures" },
+  "requirements": { "minNeedle": 0, "maxNeedle": 3, "maxColors": 2, "techniques": ["fairIsle"] },
+  "yarns": [{ "id": "light", "name": "Light" }, { "id": "dark", "name": "Dark" }],
+  "rows": [
+    {
+      "rowNumber": 1,
+      "promptsBefore": [],
+      "passes": [
+        {
+          "passId": "row-1-pass-1",
+          "direction": "leftToRight",
+          "activeNeedles": { "left": 0, "right": 3 },
+          "selection": { "encoding": "bitmap", "offset": 0, "bits": "1010" },
+          "yarnIds": ["light", "dark"],
+          "technique": "fairIsle"
+        }
+      ],
+      "promptsAfter": []
+    }
+  ]
+}

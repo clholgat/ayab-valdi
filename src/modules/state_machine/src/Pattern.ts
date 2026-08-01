@@ -55,6 +55,8 @@ export class Pattern {
   knitMode: Mode;
   /** Per-row memo digits ("0" = none), ayab-desktop#779. Indexed by pat_row. */
   memos: string[];
+  private prepackedSingleBed = false;
+  private prepackedActiveNeedleBounds?: Array<{ left: number; right: number }>;
 
   constructor(image: PatternImage, numColors: number = 2, memos: string[] = []) {
     this.width = 0;
@@ -109,6 +111,66 @@ export class Pattern {
     this.width = this.pattern.width;
     this.height = this.pattern.height;
     this.colors = this.pattern.colors;
+  }
+
+  /** True when patternExpanded was supplied as byte-exact machine-job rows. */
+  hasPrepackedSingleBedRows(): boolean {
+    return this.prepackedSingleBed;
+  }
+
+  getPrepackedActiveNeedleBounds(
+    row: number,
+  ): { left: number; right: number } | undefined {
+    return this.prepackedActiveNeedleBounds?.[row];
+  }
+
+  /**
+   * Installs exact selected-needle rows for Mode.SINGLEBED. Each input row is
+   * little-endian packed across this pattern's local width. The unused second
+   * color plane is zero-filled to preserve the existing two-plane row stride.
+   */
+  setPrepackedSingleBedRows(
+    rows: Uint8Array[],
+    width: number,
+    activeNeedleBounds?: Array<{ left: number; right: number }>,
+  ): void {
+    if (width < 1 || !Number.isInteger(width)) {
+      throw new Error("Prepacked pattern width must be a positive integer.");
+    }
+    const bytesPerRow = Math.ceil(width / 8);
+    for (const row of rows) {
+      if (row.length !== bytesPerRow) {
+        throw new Error(
+          `Prepacked row must contain exactly ${bytesPerRow} bytes.`,
+        );
+      }
+    }
+    if (
+      activeNeedleBounds !== undefined &&
+      (activeNeedleBounds.length !== rows.length ||
+        activeNeedleBounds.some(
+          (bounds) =>
+            !Number.isInteger(bounds.left) ||
+            !Number.isInteger(bounds.right) ||
+            bounds.left < 0 ||
+            bounds.right < bounds.left ||
+            bounds.right >= width,
+        ))
+    ) {
+      throw new Error("Prepacked active needle bounds must fit each row.");
+    }
+    this.width = width;
+    this.height = rows.length;
+    this.colors = 2;
+    this.patternExpanded = new Uint8Array(rows.length * 2 * bytesPerRow);
+    rows.forEach((row, index) => {
+      this.patternExpanded.set(row, index * 2 * bytesPerRow);
+    });
+    this.palette = [0x000000, 0xffffff];
+    this.prepackedSingleBed = true;
+    this.prepackedActiveNeedleBounds = activeNeedleBounds?.map((bounds) => ({
+      ...bounds,
+    }));
   }
 
   /**
@@ -168,6 +230,8 @@ export class Pattern {
     stopNeedle?: number,
     knitMode: Mode = Mode.SINGLEBED,
   ): void {
+    this.prepackedSingleBed = false;
+    this.prepackedActiveNeedleBounds = undefined;
     const imageWidth = this.pattern.width;
     const imageHeight = this.pattern.height;
 

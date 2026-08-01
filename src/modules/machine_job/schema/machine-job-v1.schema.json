@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ayab-knitting.com/schemas/machine-job-v1.schema.json",
+  "title": "AYAB MachineJob v1",
+  "type": "object",
+  "required": ["formatVersion", "jobId", "title", "coordinateSystem", "requirements", "yarns", "rows"],
+  "properties": {
+    "formatVersion": { "const": "1.0" },
+    "jobId": { "$ref": "#/$defs/nonEmptyString" },
+    "title": { "$ref": "#/$defs/nonEmptyString" },
+    "coordinateSystem": {
+      "const": "zeroBasedNeedleIndex",
+      "description": "Zero-based bed index; 0 is the leftmost selectable needle."
+    },
+    "source": {
+      "type": "object",
+      "required": ["producer"],
+      "properties": {
+        "producer": { "$ref": "#/$defs/nonEmptyString" },
+        "producerVersion": { "type": "string" },
+        "sourceId": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "requirements": {
+      "type": "object",
+      "required": ["minNeedle", "maxNeedle"],
+      "properties": {
+        "minNeedle": { "type": "integer", "minimum": 0 },
+        "maxNeedle": { "type": "integer", "minimum": 0 },
+        "maxColors": { "type": "integer", "minimum": 1 },
+        "techniques": { "$ref": "#/$defs/stringArray" },
+        "carriageRoles": { "$ref": "#/$defs/stringArray" },
+        "accessories": { "$ref": "#/$defs/stringArray" }
+      },
+      "additionalProperties": true
+    },
+    "yarns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "$ref": "#/$defs/nonEmptyString" },
+          "name": { "type": "string" },
+          "color": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/logicalRow" }
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["algorithm", "digest"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "digest": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "stringArray": { "type": "array", "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+    "sourceRef": {
+      "type": "object",
+      "properties": {
+        "documentId": { "type": "string" },
+        "section": { "type": "string" },
+        "row": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "prompt": {
+      "type": "object",
+      "required": ["id", "kind", "severity", "text", "acknowledgementRequired"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyString" },
+        "kind": { "enum": ["info", "confirm", "yarnChange", "shape", "carriageChange", "manualAction"] },
+        "severity": { "enum": ["info", "warning", "critical"] },
+        "text": { "$ref": "#/$defs/nonEmptyString" },
+        "acknowledgementRequired": { "type": "boolean" },
+        "yarnId": { "type": "string" },
+        "carriage": { "type": "string" },
+        "needle": { "type": "integer" },
+        "sourceRef": { "$ref": "#/$defs/sourceRef" }
+      },
+      "additionalProperties": true
+    },
+    "selection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["encoding", "indices"],
+          "properties": {
+            "encoding": { "const": "indices" },
+            "indices": { "type": "array", "items": { "type": "integer" }, "uniqueItems": true }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["encoding", "offset", "bits"],
+          "properties": {
+            "encoding": { "const": "bitmap" },
+            "offset": { "type": "integer" },
+            "bits": { "type": "string", "pattern": "^[01]+$" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "pass": {
+      "type": "object",
+      "required": ["passId", "direction", "activeNeedles", "selection", "yarnIds", "technique"],
+      "properties": {
+        "passId": { "$ref": "#/$defs/nonEmptyString" },
+        "direction": { "enum": ["leftToRight", "rightToLeft", "either"] },
+        "activeNeedles": {
+          "type": "object",
+          "required": ["left", "right"],
+          "properties": { "left": { "type": "integer" }, "right": { "type": "integer" } },
+          "additionalProperties": false
+        },
+        "selection": { "$ref": "#/$defs/selection" },
+        "yarnIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "technique": { "$ref": "#/$defs/nonEmptyString" },
+        "carriage": { "type": "string" },
+        "sourceRef": { "$ref": "#/$defs/sourceRef" }
+      },
+      "additionalProperties": true
+    },
+    "logicalRow": {
+      "type": "object",
+      "required": ["rowNumber", "promptsBefore", "passes", "promptsAfter"],
+      "properties": {
+        "rowNumber": { "type": "integer", "minimum": 1 },
+        "sourceRef": { "$ref": "#/$defs/sourceRef" },
+        "promptsBefore": { "type": "array", "items": { "$ref": "#/$defs/prompt" } },
+        "passes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pass" } },
+        "promptsAfter": { "type": "array", "items": { "$ref": "#/$defs/prompt" } }
+      },
+      "additionalProperties": true
+    }
+  }
+}

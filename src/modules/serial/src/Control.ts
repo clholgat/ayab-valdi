@@ -152,13 +152,19 @@ export class Control implements IControl {
       // This extracts center section if image is wider than machine and converts to bit format
       // Ensures pattern is at least as wide as the needle range
       const machineWidth = Machine.width(this.machine);
-      pattern.processPatternData(
-        machineWidth,
-        this.num_colors,
-        pattern.knitStartNeedle,
-        pattern.knitEndNeedle - 1,
-        this.mode,
-      );
+      if (!pattern.hasPrepackedSingleBedRows()) {
+        pattern.processPatternData(
+          machineWidth,
+          this.num_colors,
+          pattern.knitStartNeedle,
+          pattern.knitEndNeedle - 1,
+          this.mode,
+        );
+      } else if (this.mode !== Mode.SINGLEBED || this.num_colors !== 2) {
+        throw new Error(
+          "Prepacked rows require two-color singlebed execution.",
+        );
+      }
 
       this.reset_status();
     } else {
@@ -457,8 +463,15 @@ export class Control implements IControl {
     }
     const knitStart = this.start_needle;
     const knitCount = Math.max(0, this.end_needle - this.start_needle);
-    this.status.knitStartNeedle = knitStart;
-    this.status.knitNeedleCount = knitCount;
+    const activeBounds = this.pattern?.getPrepackedActiveNeedleBounds(
+      this.pat_row,
+    );
+    this.status.knitStartNeedle = activeBounds
+      ? this.pattern.startNeedle + activeBounds.left
+      : knitStart;
+    this.status.knitNeedleCount = activeBounds
+      ? activeBounds.right - activeBounds.left + 1
+      : knitCount;
     if (Control.FLANKING_NEEDLES && this.mode !== Mode.SINGLEBED) {
       this.status.bits = sliceNeedleBits(
         bits,

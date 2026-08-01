@@ -12,6 +12,7 @@ import { ValueNotifier } from "./ValueNotifier";
 import { AudioFeedbackSink } from "./AudioFeedback";
 import { getMissingImageKnitMessage } from "./AppUiState";
 import { SIMULATION_PORT } from "./SerialPortList";
+import { MachineJob } from "machine_job/src/MachineJobTypes";
 
 export const KNIT_FINISHED_MESSAGE: FeedbackMessage = {
   text: "Pattern completed",
@@ -39,6 +40,11 @@ export interface RunAppKnitCallbacks {
   onKnitFinished: () => void;
   onKnitRuntimeError: () => void;
   isDestroyed: () => boolean;
+}
+
+export interface RunMachineJobSimulationCallbacks extends RunAppKnitCallbacks {
+  /** Called, and awaited, after each simulated pass reaches a safe boundary. */
+  onPassCompleted?: (passIndex: number, passId: string) => Promise<void> | void;
 }
 
 let activeKnitRun: Promise<void> | undefined;
@@ -130,6 +136,72 @@ export async function runAppKnit(
 
 export function awaitActiveKnitRun(): Promise<void> {
   return activeKnitRun ?? Promise.resolve();
+}
+
+export async function runAppMachineJobSimulation(
+  job: MachineJob,
+  params: Pick<RunAppKnitParams, "isKnitting" | "preferences" | "audio"> & {
+    startPassIndex?: number;
+  },
+  callbacks: RunMachineJobSimulationCallbacks,
+): Promise<void> {
+  if (activeKnitRun) {
+    await activeKnitRun;
+    if (callbacks.isDestroyed()) return;
+  }
+  if (params.isKnitting) return;
+
+  const startResult = KnitSession.tryStartMachineJobSimulation({
+    job,
+    preferences: params.preferences,
+    startPassIndex: params.startPassIndex,
+  });
+  if (!startResult.ok) {
+    callbacks.onValidationError({
+      text: startResult.message,
+      level: "error",
+    });
+    return;
+  }
+
+  const session = startResult.session;
+  callbacks.onStatusVersion(0);
+  callbacks.onKnitStarted(session);
+  const runPromise = session
+    .run({
+      onStatusVersion: callbacks.onStatusVersion,
+      isDestroyed: callbacks.isDestroyed,
+      onFeedback: callbacks.onFeedback,
+      quietMode: params.preferences.quietMode,
+      audio: params.audio,
+      onPassCompleted: callbacks.onPassCompleted
+        ? async (passIndex) => {
+            const passId = job.rows[passIndex]?.passes[0]?.passId;
+            if (passId === undefined) {
+              throw new Error(
+                `Completed pass ${passIndex} is not present in the machine job.`,
+              );
+            }
+            await callbacks.onPassCompleted!(passIndex, passId);
+          }
+        : undefined,
+    })
+    .then((result) => {
+      if (result === "finished" && !callbacks.isDestroyed()) {
+        callbacks.onKnitFinished();
+      }
+    })
+    .catch((error) => {
+      console.error("Error simulating machine job:", error);
+      if (!callbacks.isDestroyed()) callbacks.onKnitRuntimeError();
+    });
+
+  activeKnitRun = runPromise;
+  try {
+    await runPromise;
+  } finally {
+    if (activeKnitRun === runPromise) activeKnitRun = undefined;
+  }
 }
 
 export interface RunAppHardwareTestParams {
