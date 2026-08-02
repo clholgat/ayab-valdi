@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.snap.valdi.ayab_valdi_app">
+    <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="34" />
+    <application
+        android:allowBackup="true"
+        android:label="ayab_valdi"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        <provider
+            android:name="com.snap.modules.serial.SerialAppContextProvider"
+            android:authorities="com.snap.modules.serial.contextprovider"
+            android:exported="false"
+            android:initOrder="100" />
+        <activity
+            android:name="com.snap.valdi.ayab_valdi_app.StartActivity"
+            android:screenOrientation="portrait"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+</manifest>

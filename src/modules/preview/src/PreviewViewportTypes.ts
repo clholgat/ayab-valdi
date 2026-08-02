@@ -10,8 +10,9 @@ export function computeZoomContentKey(
   bitsLength: number,
   autoMirror: boolean,
   aspectRatio: number,
+  contentIdentity = "",
 ): string {
-  return `${width}x${height}-${bitsLength}-${autoMirror ? "m" : "n"}-${aspectRatio}`;
+  return `${width}x${height}-${bitsLength}-${autoMirror ? "m" : "n"}-${aspectRatio}-${contentIdentity}`;
 }
 
 export interface ZoomablePreviewViewportViewModel {

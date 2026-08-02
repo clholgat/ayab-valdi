@@ -203,6 +203,7 @@ export class AppSidebar extends StatefulComponent<
     <SerialPortPicker
       tourHighlighted={tourHighlightActive(vm.activeTourTargetId, "checklist-target-connection")}
       onChange={vm.onSerialPortChange}
+      onOpenPicker={this.handleOpenPicker}
     />;
     <InlineTourBubble
       targetId="checklist-target-connection"

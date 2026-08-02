@@ -8,6 +8,11 @@ export interface FirstRunTourStep {
   anchor: TourAnchor;
 }
 
+export interface TourSurfaceState {
+  showPreferences: boolean;
+  sidebarDrawerOpen: boolean;
+}
+
 export const FIRST_RUN_TOUR_STEPS: FirstRunTourStep[] = [
   {
     id: "machine",
@@ -23,7 +28,8 @@ export const FIRST_RUN_TOUR_STEPS: FirstRunTourStep[] = [
     title: "Connect or simulate",
     body:
       "Simulation lets you practice without hardware. " +
-      "When ready, pick your USB device and tap Refresh.",
+      "On Android, open Connection and choose Select USB device… to grant access. " +
+      "Use Refresh after reconnecting it.",
     targetId: "checklist-target-connection",
     anchor: "sidebar",
   },
@@ -78,6 +84,17 @@ export function previousTourStepIndex(current: number): number {
 
 export function canTourGoBack(current: number): boolean {
   return current > 0;
+}
+
+export function tourSurfaceState(
+  step: FirstRunTourStep | undefined,
+  compactLayout: boolean,
+): TourSurfaceState {
+  return {
+    showPreferences: step?.id === "machine",
+    sidebarDrawerOpen:
+      compactLayout && (step?.id === "connection" || step?.id === "needles"),
+  };
 }
 
 export function tourHighlightActive(

@@ -24,8 +24,8 @@ import {
   sidebarCardStyle,
   sidebarHintStyle,
   sidebarSectionLabelStyle,
-  SIDEBAR_FIELD_HEIGHT,
 } from "constants/src/SidebarStyles";
+import { ActivePickerConfig } from "constants/src/OptionPickerModal";
 import {
   STATUS_IDLE,
   STATUS_NETWORK,
@@ -44,7 +44,6 @@ import {
   refreshNetworkServices,
   registerManualWebSocketService,
 } from "serial/src/NetworkDiscovery";
-import { IndexPicker } from "widgets/src/components/pickers/IndexPicker";
 import {
   CoreButton,
   CoreButtonColoring,
@@ -55,12 +54,14 @@ export interface SerialPortPickerViewModel {
   style?: Style<Layout>;
   tourHighlighted?: boolean;
   onChange: (serialPort: string) => void;
+  onOpenPicker: (config: ActivePickerConfig) => void;
 }
 
 export interface SerialPortPickerState {
   portEntries: SerialPortEntry[];
   selectedSerialPortIndex: number;
   isRefreshing: boolean;
+  connectionError?: string;
 }
 
 export class SerialPortPicker extends StatefulComponent<
@@ -171,6 +172,7 @@ export class SerialPortPicker extends StatefulComponent<
     if (requires_usb_permission_prompt() && entry.uri === SELECT_USB_LABEL) {
       const previousIndex = this.state.selectedSerialPortIndex;
       try {
+        this.setState({ connectionError: undefined });
         const portName = await request_serial_port();
         if (portName) {
           const entries = buildPortList(
@@ -186,11 +188,19 @@ export class SerialPortPicker extends StatefulComponent<
           });
           this.viewModel.onChange(portName);
         } else {
-          this.setState({ selectedSerialPortIndex: previousIndex });
+          this.setState({
+            selectedSerialPortIndex: previousIndex,
+            connectionError:
+              "No compatible USB serial interface was found, or Android access was denied. Check OTG/power, reconnect it, and choose Select USB device… again.",
+          });
         }
       } catch (err: unknown) {
         console.error("Error requesting serial port:", err);
-        this.setState({ selectedSerialPortIndex: previousIndex });
+        this.setState({
+          selectedSerialPortIndex: previousIndex,
+          connectionError:
+            "Android could not open the USB interface. Reconnect it and choose Select USB device… again.",
+        });
       }
       return;
     }
@@ -222,8 +232,16 @@ export class SerialPortPicker extends StatefulComponent<
     this.viewModel.onChange(entry.uri);
   };
 
+  private handleOpenPortPicker = (): void => {
+    this.viewModel.onOpenPicker({
+      title: "Connection",
+      labels: entryLabels(this.state.portEntries),
+      selectedIndex: this.state.selectedSerialPortIndex,
+      onSelect: this.handlePortChange,
+    });
+  };
+
   onRender() {
-    const labels = entryLabels(this.state.portEntries);
     const selectedUri = uriForEntryIndex(
       this.state.portEntries,
       this.state.selectedSerialPortIndex,
@@ -258,11 +276,14 @@ export class SerialPortPicker extends StatefulComponent<
         </layout>
         <layout style={styles.pickerRow}>
           <layout style={styles.pickerWrap}>
-            <IndexPicker
-              style={styles.picker}
-              index={this.state.selectedSerialPortIndex}
-              labels={labels}
-              onChange={this.handlePortChange}
+            <CoreButton
+              text={this.state.portEntries[this.state.selectedSerialPortIndex]?.label ?? "Choose connection"}
+              onTap={this.handleOpenPortPicker}
+              coloring={CoreButtonColoring.SECONDARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
+              accessibilityId="connection-picker-open"
+              width="100%"
             />
           </layout>
           <CoreButton
@@ -274,10 +295,12 @@ export class SerialPortPicker extends StatefulComponent<
             accessibilityId="connection-refresh"
           />
         </layout>
-        {status.kind === "prompt" ? (
+        {this.state.connectionError ? (
+          <label style={styles.connectionError} value={this.state.connectionError} />
+        ) : status.kind === "prompt" ? (
           <label
             style={styles.connectionHint}
-            value="Choose a USB device or add a network URL, then tap Refresh."
+            value="Open Connection and choose Select USB device… to grant Android access. Use Refresh after reconnecting."
           />
         ) : undefined}
       </layout>
@@ -315,10 +338,11 @@ const styles = {
     flexShrink: 1,
     marginRight: 8,
   }),
-  picker: new Style<View>({
-    width: "100%",
-    height: SIDEBAR_FIELD_HEIGHT,
-    flexShrink: 0,
-  }),
   connectionHint: sidebarHintStyle,
+  connectionError: new Style<Label>({
+    font: sansFont(13),
+    color: "#B42318",
+    marginTop: 2,
+    marginBottom: 4,
+  }),
 };

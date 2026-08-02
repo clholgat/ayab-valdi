@@ -268,7 +268,9 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     fileName: string,
     userSelected: boolean,
   ): void {
-    const generation = this.loadGeneration;
+    // Give every selection its own generation so a previous async decode can
+    // never win a race and replace a newer sample.
+    const generation = ++this.loadGeneration;
 
     // Module-resource samples ("preview:stem") need a platform-specific
     // decode path -- neither of the two below understands that scheme, and
@@ -721,6 +723,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
                     this.state.bits!.length,
                     this.viewModel.autoMirror ?? false,
                     this.viewModel.aspectRatio ?? 0,
+                    this.state.selectedImageName,
                   )}
                 />
               </layout>

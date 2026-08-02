@@ -319,7 +319,7 @@ class PreferencesScreenInner extends StatefulComponent<
         </layout>
       </layout>
       <layout style={styles.toolsRow}>
-        <layout style={styles.buttonSlot}>
+        <layout style={styles.toolButtonSlot}>
           <CoreButton
             accessibilityId="hardware-test-button"
             text={
@@ -333,7 +333,7 @@ class PreferencesScreenInner extends StatefulComponent<
             width="100%"
           />
         </layout>
-        <layout style={styles.buttonSlot}>
+        <layout style={styles.toolButtonSlot}>
           <CoreButton
             accessibilityId="flash-firmware-button"
             text={this.viewModel.isFlashing ? "Flashing..." : "Flash Firmware"}
@@ -345,7 +345,7 @@ class PreferencesScreenInner extends StatefulComponent<
             width="100%"
           />
         </layout>
-        <layout style={styles.buttonSlotLast}>
+        <layout style={styles.toolButtonSlotLast}>
           <CoreButton
             accessibilityId="about-button"
             text="About"
@@ -497,6 +497,7 @@ const styles = {
   toolsRow: new Style<Layout>({
     width: "100%",
     flexDirection: "row",
+    flexWrap: "wrap",
     marginTop: 12,
   }),
   buttonSlot: new Style<Layout>({
@@ -507,6 +508,19 @@ const styles = {
   buttonSlotLast: new Style<Layout>({
     flexGrow: 1,
     flexShrink: 1,
+  }),
+  toolButtonSlot: new Style<Layout>({
+    flexBasis: 140,
+    flexGrow: 1,
+    flexShrink: 0,
+    marginRight: 8,
+    marginBottom: 8,
+  }),
+  toolButtonSlotLast: new Style<Layout>({
+    flexBasis: 140,
+    flexGrow: 1,
+    flexShrink: 0,
+    marginBottom: 8,
   }),
   aboutContent: new Style<Layout>({
     width: "100%",

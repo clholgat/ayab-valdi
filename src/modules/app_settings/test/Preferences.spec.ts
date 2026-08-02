@@ -11,6 +11,7 @@ describe("Preferences", () => {
     await prefs.initialize();
     expect(prefs.machine).toBe(Machine.KH910_KH950);
     expect(prefs.defaultKnittingMode).toBe(Mode.SINGLEBED);
+    expect(prefs.defaultInfiniteRepeat).toBe(true);
     expect(prefs.quietMode).toBe(Preferences.DEFAULT_QUIET_MODE);
     expect(prefs.disableHardwareBeep).toBe(
       Preferences.DEFAULT_DISABLE_HARDWARE_BEEP,
@@ -41,6 +42,7 @@ describe("Preferences", () => {
       Preferences.DEFAULT_DISABLE_HARDWARE_BEEP,
     );
     expect(prefs.machine as Machine).toBe(Machine.KH910_KH950);
+    expect(prefs.defaultInfiniteRepeat).toBe(true);
     expect(prefs.language).toBe("de_DE");
   });
 

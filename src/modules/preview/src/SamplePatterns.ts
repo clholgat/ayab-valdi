@@ -1,7 +1,14 @@
 import { Device } from "valdi_core/src/Device";
+import {
+  Asset,
+  makeAssetFromBytes,
+} from "valdi_core/src/Asset";
 import { loadCatalog } from "valdi_core/src/AssetCatalog";
 import { ANNOTATED_PATTERN_FILES } from "./AnnotatedPatternFiles";
-import { moduleResourceDataUrl } from "./ModuleResourceBits";
+import {
+  moduleResourceBytes,
+  moduleResourceDataUrl,
+} from "./ModuleResourceBits";
 
 export type SamplePatternCategory = "featured" | "annotated" | "kh910";
 
@@ -28,6 +35,7 @@ export type SamplePatternListItem =
   | { kind: "pattern"; sample: SamplePattern };
 
 const CATALOG_MODULE = "preview/res";
+const nativeThumbnailAssets: Record<string, Asset> = {};
 
 const FEATURED_SPECS: Array<{
   fileName: string;
@@ -221,15 +229,29 @@ export function resolveSamplePatternSources(
   };
 }
 
-export function resolveSamplePatternImageSrc(sample: SamplePattern): string {
-  const exactDataUrl = Device.isWeb()
-    ? moduleResourceDataUrl(sample.resource)
-    : undefined;
-  return resolveSamplePatternSources(
-    sample,
-    exactDataUrl,
-    resolveWebImageUrl(sample),
-  ).imageSrc;
+export function resolveSamplePatternImageSrc(
+  sample: SamplePattern,
+): string | Asset {
+  if (Device.isWeb()) {
+    return resolveSamplePatternSources(
+      sample,
+      moduleResourceDataUrl(sample.resource),
+      resolveWebImageUrl(sample),
+    ).imageSrc;
+  }
+
+  const cached = nativeThumbnailAssets[sample.resource];
+  if (cached) {
+    return cached;
+  }
+
+  const bytes = moduleResourceBytes(sample.resource);
+  if (!bytes) {
+    return sample.resource;
+  }
+  const asset = makeAssetFromBytes(bytes);
+  nativeThumbnailAssets[sample.resource] = asset;
+  return asset;
 }
 
 export function resolveSamplePatternSource(sample: SamplePattern): string {

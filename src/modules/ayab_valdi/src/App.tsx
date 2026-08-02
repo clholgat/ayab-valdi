@@ -48,11 +48,17 @@ import {
   CoreButtonSizing,
 } from "widgets/src/components/button/CoreButton";
 import {
+  forceColorPalette,
+  getCurrentPalette,
+  initializeSemanticColors,
+} from "widgets/src/InitSemanticColors";
+import {
   FIRST_RUN_TOUR_STEP_COUNT,
   FirstRunTourStep,
   getFirstRunTourStep,
   nextTourStepIndex,
   previousTourStepIndex,
+  tourSurfaceState,
   tourHighlightActive,
 } from "./FirstRunTour";
 import {
@@ -223,6 +229,14 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   };
 
   onCreate(): void {
+    // InitSemanticColors is imported by widget modules while the bundle is
+    // loading, which can be earlier than Android's native runtime is ready to
+    // accept its palette. Re-apply it from the root component lifecycle so
+    // semantic colors (notably CoreButton backgrounds) are registered before
+    // the first render, then observe subsequent light/dark-mode changes.
+    forceColorPalette(getCurrentPalette());
+    initializeSemanticColors();
+
     if (Device.isWeb()) {
       const e2eWs = (globalThis as { __E2E_WEBSOCKET_URI__?: string })
         .__E2E_WEBSOCKET_URI__;
@@ -566,7 +580,11 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
 
   private completeFirstRunTour = (): void => {
     this.state.preferences.firstRunTourCompleted = true;
-    this.setState({ firstRunTourStep: null });
+    this.setState({
+      firstRunTourStep: null,
+      showPreferences: false,
+      sidebarDrawerOpen: false,
+    });
   };
 
   private handleTourNext = (): void => {
@@ -580,9 +598,13 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       this.completeFirstRunTour();
       return;
     }
+    const surface = tourSurfaceState(
+      getFirstRunTourStep(next),
+      this.state.compactLayout === true,
+    );
     this.setState({
       firstRunTourStep: next,
-      showPreferences: next === 0,
+      ...surface,
     });
   };
 
@@ -592,9 +614,13 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       return;
     }
     const previous = previousTourStepIndex(step);
+    const surface = tourSurfaceState(
+      getFirstRunTourStep(previous),
+      this.state.compactLayout === true,
+    );
     this.setState({
       firstRunTourStep: previous,
-      showPreferences: previous === 0,
+      ...surface,
     });
   };
 
@@ -1152,6 +1178,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
           this.flashProgressNotifier.set(totalBytes > 0 ? bytesWritten / totalBytes : 0);
         },
         onOutput: (text) => {
+          console.log(`[Firmware flash] ${text}`);
           this.flashLogNotifier.update((log) => (log.length > 0 ? `${log}\n${text}` : text));
         },
         onFinished: (result) => {

@@ -342,6 +342,9 @@ const styles = {
     flexGrow: 1,
     flexShrink: 1,
     minWidth: 0,
+    // Slider's handle shadow paints just outside its 25px bar. Keep that
+    // paint inside this wrapper so Android parent clipping does not trim it.
+    padding: 2,
   }),
   zoomValueLabel: new Style<Label>({
     font: sansFont(13),

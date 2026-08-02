@@ -9,8 +9,16 @@ import {
   rgbaToHexColor,
   rgbIntToHex,
 } from "preview/src/FormattedDisplayLogic";
+import { computeZoomContentKey } from "preview/src/PreviewViewportTypes";
 
 describe("FormattedDisplayLogic", () => {
+  it("distinguishes equal-sized samples by content identity", () => {
+    const first = computeZoomContentKey(60, 40, 40, false, 0, "first.png");
+    const second = computeZoomContentKey(60, 40, 40, false, 0, "second.png");
+
+    expect(first).not.toBe(second);
+  });
+
   describe("rgbaToHexColor", () => {
     it("formats opaque RGB as 6-digit hex", () => {
       expect(rgbaToHexColor(new Uint8Array([255, 0, 128, 255]))).toBe(

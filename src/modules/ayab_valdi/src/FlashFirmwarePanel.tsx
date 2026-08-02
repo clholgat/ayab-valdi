@@ -1,7 +1,6 @@
 import { StatefulComponent } from "valdi_core/src/Component";
-import { ElementRef } from "valdi_core/src/ElementRef";
 import { Style } from "valdi_core/src/Style";
-import { Layout, View, Label, ScrollView, ScrollViewInteractive } from "valdi_tsx/src/NativeTemplateElements";
+import { Layout, View, Label, ScrollView } from "valdi_tsx/src/NativeTemplateElements";
 import { sansFont, sansBoldFont, BUTTON_FONT_TINY } from "constants/src/Typography";
 import {
   SIDEBAR_CARD_BACKGROUND,
@@ -24,69 +23,25 @@ export interface FlashFirmwarePanelViewModel {
   onClose: () => void;
 }
 
-const SCROLL_TO_END_BASE = 1_000_000_000;
+export function flashFirmwareStatus(
+  progress: number,
+  finished: boolean,
+): string {
+  const percent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+  if (!finished) {
+    return `${percent}%`;
+  }
+  return percent >= 100 ? "Complete" : "Failed";
+}
 
 export class FlashFirmwarePanel extends StatefulComponent<
   FlashFirmwarePanelViewModel,
   Record<string, never>
 > {
-  private logScrollRef = new ElementRef<ScrollViewInteractive>();
-  private scrollSeq = 0;
-  private pendingScrollHandle?: ReturnType<typeof setTimeout> | number;
-
-  onCreate(): void {
-    if (this.viewModel.log.length > 0) {
-      this.scrollLogToBottom();
-    }
-  }
-
-  onViewModelUpdate(prev?: FlashFirmwarePanelViewModel): void {
-    if (prev && prev.log !== this.viewModel.log) {
-      this.scrollLogToBottom();
-    }
-  }
-
-  onDestroy(): void {
-    this.cancelPendingScroll();
-  }
-
-  private cancelPendingScroll(): void {
-    if (this.pendingScrollHandle == null) {
-      return;
-    }
-    if (typeof this.pendingScrollHandle === "number") {
-      if (typeof cancelAnimationFrame !== "undefined") {
-        cancelAnimationFrame(this.pendingScrollHandle);
-      }
-    } else {
-      clearTimeout(this.pendingScrollHandle);
-    }
-    this.pendingScrollHandle = undefined;
-  }
-
-  private scrollLogToBottom(): void {
-    this.cancelPendingScroll();
-    const schedule =
-      typeof requestAnimationFrame !== "undefined"
-        ? requestAnimationFrame
-        : (cb: () => void) => setTimeout(cb, 0);
-    this.pendingScrollHandle = schedule(() => {
-      this.pendingScrollHandle = undefined;
-      if (this.isDestroyed()) {
-        return;
-      }
-      this.scrollSeq += 1;
-      this.logScrollRef.setAttribute(
-        "contentOffsetY",
-        SCROLL_TO_END_BASE + this.scrollSeq,
-      );
-    });
-  }
-
   onRender(): void {
     const vm = this.viewModel;
     const percent = Math.max(0, Math.min(100, Math.round(vm.progress * 100)));
-    const status = vm.finished ? "Done" : `${percent}%`;
+    const status = flashFirmwareStatus(vm.progress, vm.finished);
     <view
       accessibilityId="flash-firmware-panel"
       key="flash-firmware-panel"
@@ -112,7 +67,6 @@ export class FlashFirmwarePanel extends StatefulComponent<
           <view style={styles.progressFill(percent)} />
         </view>
         <scroll
-          ref={this.logScrollRef}
           accessibilityId="flash-firmware-log"
           style={styles.consoleScroll}
         >

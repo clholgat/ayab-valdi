@@ -9,6 +9,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
@@ -21,11 +22,13 @@ import com.snap.valdi.promise.ResolvablePromise
 import com.snap.valdi.promise.ResolvedPromise
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 private const val USB_PERMISSION_ACTION = "com.snap.modules.serial.USB_PERMISSION"
+private const val LOG_TAG = "AyabSerial"
 
 @RegisterValdiModule
 class SerialModuleFactoryImpl: SerialModuleFactory() {
@@ -38,6 +41,7 @@ class SerialModuleFactoryImpl: SerialModuleFactory() {
 class SerialModuleImpl: SerialModule {
     private val isOpen = AtomicBoolean(false)
     private val readBuffer = ConcurrentLinkedQueue<Byte>()
+    private val dataAvailableResolvers = CopyOnWriteArrayList<() -> Unit>()
     private val bufferLock = ReentrantLock()
     
     // USB Serial port
@@ -66,6 +70,7 @@ class SerialModuleImpl: SerialModule {
             shouldStopReading.set(true)
             
             try {
+                Log.i(LOG_TAG, "Closing USB serial")
                 // Stop read thread
                 readThread?.interrupt()
                 readThread?.join(1000)
@@ -104,6 +109,7 @@ class SerialModuleImpl: SerialModule {
     }
     
     private fun openUsbSerial(uri: String) {
+        Log.i(LOG_TAG, "Opening USB serial uri=$uri baud=$BAUD_RATE")
         context = SerialAppContext.applicationContext
             ?: throw IOException(
                 "Android Context is not yet available (SerialAppContextProvider hasn't run)."
@@ -119,6 +125,11 @@ class SerialModuleImpl: SerialModule {
         // - Vendor ID:Product ID format
         usbDevice = findUsbDevice(uri, usbManager!!)
             ?: throw IOException("USB device not found: $uri")
+        Log.i(
+            LOG_TAG,
+            "Matched USB device name=${usbDevice!!.deviceName} " +
+                "vid=${usbDevice!!.vendorId.toString(16)} pid=${usbDevice!!.productId.toString(16)}"
+        )
         
         // Request USB permissions if needed
         // Note: This typically requires user interaction via a broadcast receiver
@@ -148,6 +159,7 @@ class SerialModuleImpl: SerialModule {
         
         // Configure serial port parameters (115200 baud, 8N1 - matching Python implementation)
         usbPort!!.setParameters(BAUD_RATE, DATA_BITS, STOP_BITS, PARITY)
+        Log.i(LOG_TAG, "USB serial opened and configured")
         
         // Start read thread
         startReadThread()
@@ -202,12 +214,14 @@ class SerialModuleImpl: SerialModule {
             }
             
             try {
+                Log.d(LOG_TAG, "TX ${data.size} bytes")
                 usbPort?.write(data, 0)
             } catch (e: IOException) {
+                Log.e(LOG_TAG, "Serial write failed (${data.size} bytes)", e)
                 // If write fails, connection might be broken
                 isOpen.set(false)
             } catch (e: Exception) {
-                // Log error
+                Log.e(LOG_TAG, "Unexpected serial write failure (${data.size} bytes)", e)
             }
         }
     }
@@ -224,11 +238,9 @@ class SerialModuleImpl: SerialModule {
                     if (readBuffer.isEmpty()) {
                         return ByteArray(0)
                     }
-                    val bytes = mutableListOf<Byte>()
-                    while (readBuffer.isNotEmpty() && bytes.size < 256) {
-                        readBuffer.poll()?.let { bytes.add(it) }
-                    }
-                    return bytes.toByteArray()
+                    // The cross-platform contract is peek + consumeReadBuffer.
+                    // Removing here would make callers consume every byte twice.
+                    return readBuffer.asSequence().take(256).toList().toByteArray()
                 }
             } catch (e: Exception) {
                 // Log error
@@ -275,10 +287,15 @@ class SerialModuleImpl: SerialModule {
         val manager = ctx.getSystemService(Context.USB_SERVICE) as? UsbManager
             ?: return ResolvedPromise(null)
 
-        val candidate = manager.deviceList.values.firstOrNull { device ->
-            !manager.hasPermission(device) &&
-                UsbSerialProber.getDefaultProber().probeDevice(device) != null
-        } ?: return ResolvedPromise(null)
+        val supportedDevices = manager.deviceList.values.filter { device ->
+            UsbSerialProber.getDefaultProber().probeDevice(device) != null
+        }
+        supportedDevices.firstOrNull { manager.hasPermission(it) }?.let {
+            Log.i(LOG_TAG, "Reusing authorized USB device ${it.deviceName}")
+            return ResolvedPromise(it.deviceName)
+        }
+        val candidate = supportedDevices.firstOrNull { !manager.hasPermission(it) }
+            ?: return ResolvedPromise(null)
 
         val promise = ResolvablePromise<String?>()
         val receiver = object : BroadcastReceiver() {
@@ -304,15 +321,32 @@ class SerialModuleImpl: SerialModule {
             ctx.registerReceiver(receiver, filter)
         }
 
-        val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or
-            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
-        val permissionIntent = PendingIntent.getBroadcast(
-            ctx,
-            0,
-            Intent(USB_PERMISSION_ACTION),
-            pendingIntentFlags,
-        )
-        manager.requestPermission(candidate, permissionIntent)
+        try {
+            val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+            // UsbManager adds the device and grant result to this PendingIntent,
+            // so it must remain mutable. Android 14 forbids mutable implicit
+            // PendingIntents; scoping the broadcast to our package makes it
+            // explicit while still allowing the dynamic receiver above to see it.
+            val permissionBroadcast = Intent(USB_PERMISSION_ACTION).apply {
+                setPackage(ctx.packageName)
+            }
+            val permissionIntent = PendingIntent.getBroadcast(
+                ctx,
+                0,
+                permissionBroadcast,
+                pendingIntentFlags,
+            )
+            manager.requestPermission(candidate, permissionIntent)
+        } catch (error: Exception) {
+            Log.e(LOG_TAG, "Failed to request USB permission", error)
+            try {
+                ctx.unregisterReceiver(receiver)
+            } catch (ignored: Exception) {
+                // Receiver was already removed — ignore.
+            }
+            promise.fulfillSuccess(null)
+        }
 
         return promise
     }
@@ -323,9 +357,20 @@ class SerialModuleImpl: SerialModule {
     }
 
     override fun pulse_dtr_rts_reset(): Promise<Unit> {
-        // Firmware flashing is currently web-only. Keep the native bridge
-        // complete so adding the web helper to Serial.d.ts does not break the
-        // Android build.
+        val port = usbPort ?: return ResolvedPromise(Unit)
+        try {
+            // Match the proven Web/macOS/Linux sequence: DTR low, then DTR and
+            // RTS high. The asymmetric pulse resets an Uno into Optiboot.
+            port.dtr = false
+            Thread.sleep(100)
+            port.dtr = true
+            port.rts = true
+            Log.i(LOG_TAG, "Pulsed DTR low for 100ms, then DTR+RTS high")
+        } catch (error: Exception) {
+            Log.e(LOG_TAG, "DTR/RTS bootloader reset pulse failed", error)
+            // Some drivers do not expose modem-control lines. The flash
+            // session will report a bootloader sync failure instead of crash.
+        }
         return ResolvedPromise(Unit)
     }
 
@@ -346,8 +391,8 @@ class SerialModuleImpl: SerialModule {
     }
 
     override fun registerDataAvailableResolver(resolver: () -> Unit): () -> Unit {
-        // No async read notifications in the v1 prep-only build.
-        return {}
+        dataAvailableResolvers.add(resolver)
+        return { dataAvailableResolvers.remove(resolver) }
     }
 
     override fun in_waiting(): Double {
@@ -394,15 +439,24 @@ class SerialModuleImpl: SerialModule {
                 try {
                     val bytesRead = usbPort?.read(buffer, 100) ?: 0
                     if (bytesRead > 0) {
+                        Log.d(LOG_TAG, "RX $bytesRead bytes")
                         bufferLock.withLock {
                             for (i in 0 until bytesRead) {
                                 readBuffer.offer(buffer[i])
+                            }
+                        }
+                        dataAvailableResolvers.forEach { resolver ->
+                            try {
+                                resolver()
+                            } catch (ignored: Exception) {
+                                // A stale JS callback must not stop serial IO.
                             }
                         }
                     }
                 } catch (e: InterruptedException) {
                     break
                 } catch (e: Exception) {
+                    Log.e(LOG_TAG, "Serial read loop stopped", e)
                     if (e is IOException) {
                         isOpen.set(false)
                     }

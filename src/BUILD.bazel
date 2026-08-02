@@ -1,11 +1,16 @@
 load("@valdi//bzl/valdi:valdi_application.bzl", "valdi_application")
 load("@valdi//bzl/valdi:valdi_exported_library.bzl", "valdi_exported_library")
+load("@valdi//bzl/valdi/source_set:utils.bzl", "source_set_select")
 
 valdi_application(
     name = "ayab_valdi_app",
     ios_bundle_id = "com.website.ayab_valdi",
     ios_families = ["iphone"],
     root_component_path = "App@ayab_valdi/src/App",
+    android_app_manifest = source_set_select(
+        debug = "AndroidDebugManifest.xml",
+        release = "AndroidReleaseManifest.xml",
+    ),
     title = "ayab_valdi",
     version = "1.0.0",
     deps = ["//modules/ayab_valdi"],

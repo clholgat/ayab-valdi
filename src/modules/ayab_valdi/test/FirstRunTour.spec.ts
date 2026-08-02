@@ -7,7 +7,9 @@ import {
   canTourGoBack,
   tourHighlightActive,
   tourTargetChrome,
+  tourSurfaceState,
 } from "ayab_valdi/src/FirstRunTour";
+import { flashFirmwareStatus } from "ayab_valdi/src/FlashFirmwarePanel";
 
 describe("FirstRunTour", () => {
   it("defines five onboarding steps", () => {
@@ -35,5 +37,32 @@ describe("FirstRunTour", () => {
     expect(previousTourStepIndex(0)).toBe(0);
     expect(canTourGoBack(0)).toBe(false);
     expect(canTourGoBack(1)).toBe(true);
+  });
+
+  it("opens the surface containing each compact-layout tour target", () => {
+    expect(tourSurfaceState(getFirstRunTourStep(0), true)).toEqual({
+      showPreferences: true,
+      sidebarDrawerOpen: false,
+    });
+    expect(tourSurfaceState(getFirstRunTourStep(1), true)).toEqual({
+      showPreferences: false,
+      sidebarDrawerOpen: true,
+    });
+    expect(tourSurfaceState(getFirstRunTourStep(2), true)).toEqual({
+      showPreferences: false,
+      sidebarDrawerOpen: false,
+    });
+    expect(tourSurfaceState(getFirstRunTourStep(3), true)).toEqual({
+      showPreferences: false,
+      sidebarDrawerOpen: true,
+    });
+  });
+});
+
+describe("FlashFirmwarePanel status", () => {
+  it("distinguishes active, failed, and completed flashes", () => {
+    expect(flashFirmwareStatus(0.42, false)).toBe("42%");
+    expect(flashFirmwareStatus(0, true)).toBe("Failed");
+    expect(flashFirmwareStatus(1, true)).toBe("Complete");
   });
 });

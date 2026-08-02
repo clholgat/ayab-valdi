@@ -24,6 +24,7 @@ export class Preferences {
   static readonly DEFAULT_QUIET_MODE = false;
   /** Hardware beeps on when false (firmware muted when true). */
   static readonly DEFAULT_DISABLE_HARDWARE_BEEP = false;
+  static readonly DEFAULT_INFINITE_REPEAT = true;
 
   // Preference keys
   private static readonly KEY_MACHINE = "machine";
@@ -118,7 +119,7 @@ export class Preferences {
     if (this._defaultInfiniteRepeat === undefined) {
       this._defaultInfiniteRepeat = this.getValue(
         Preferences.KEY_DEFAULT_INFINITE_REPEAT,
-        false,
+        Preferences.DEFAULT_INFINITE_REPEAT,
       );
     }
     return this._defaultInfiniteRepeat;
@@ -278,7 +279,7 @@ export class Preferences {
   async reset(): Promise<void> {
     this.machine = Machine.KH910_KH950;
     this.defaultKnittingMode = Mode.SINGLEBED;
-    this.defaultInfiniteRepeat = false;
+    this.defaultInfiniteRepeat = Preferences.DEFAULT_INFINITE_REPEAT;
     this.defaultAlignment = Alignment.CENTER;
     this.defaultKnitSideImage = false;
     this.aspectRatio = AspectRatio.FAIRISLE;
@@ -331,7 +332,7 @@ export class Preferences {
       );
       this._defaultInfiniteRepeat = await this.loadValue(
         Preferences.KEY_DEFAULT_INFINITE_REPEAT,
-        false,
+        Preferences.DEFAULT_INFINITE_REPEAT,
       );
       this._defaultAlignment = await this.loadValue(
         Preferences.KEY_DEFAULT_ALIGNMENT,

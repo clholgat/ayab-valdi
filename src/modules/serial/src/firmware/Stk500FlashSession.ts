@@ -188,6 +188,10 @@ export function createWebSerialTransport(): Stk500SerialTransport {
         tryResolve();
         if (!resolved) {
           removeResolver = registerDataAvailableResolver(tryResolve);
+          // Native USB can answer between the first buffer check and resolver
+          // registration. Re-check after registration so that fast reply is
+          // not left buffered until the timeout fires.
+          tryResolve();
         }
       });
     },
@@ -333,9 +337,17 @@ export class Stk500FlashSession {
         return;
       }
       attempts += 1;
+      callbacks.onOutput(
+        `  sync attempt ${attempts} at ${Date.now() - startedAt}ms...`,
+      );
       try {
         this.transport.write(buildGetSync());
         const response = await this.transport.readExactly(2, SYNC_ATTEMPT_TIMEOUT_MS);
+        callbacks.onOutput(
+          `  sync response ${attempts}: ${Array.from(response)
+            .map((byte) => `0x${byte.toString(16).padStart(2, "0")}`)
+            .join(" ")}`,
+        );
         if (isSyncOk(response)) {
           // A retried get-sync can leave a stray extra reply queued behind
           // this one (see discardBuffered()'s doc comment) - clear it now,
@@ -349,6 +361,11 @@ export class Stk500FlashSession {
         lastError = new Error("bootloader responded, but not with INSYNC/OK");
       } catch (err: unknown) {
         lastError = err as Error;
+        callbacks.onOutput(
+          `  sync attempt ${attempts} failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
       }
       await this.transport.delay(SYNC_RETRY_DELAY_MS);
     }

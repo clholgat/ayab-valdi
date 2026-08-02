@@ -7,6 +7,11 @@ valdi_android_library(
         "android/**/*.kt",
     ]),
     manifest = "android/AndroidManifest.xml",
+    # The host application's UsbManager context is initialized by the
+    # ContentProvider declared in this manifest. Without exporting it, Bazel
+    # packages the Kotlin classes but drops the provider declaration from the
+    # final APK, causing every USB operation to silently see no context.
+    exports_manifest = 1,
     visibility = ["//visibility:public"],
     deps = [
         ":serial_api_kt",

@@ -55,9 +55,10 @@ const imageGridWrapperStyle = (hasMemos: boolean) =>
     position: "relative",
     flexShrink: 0,
     alignSelf: "flex-start",
-    // Reserve an outside gutter only when the pattern actually carries row
-    // annotations. The badges must never obscure stitch pixels.
-    marginRight: hasMemos ? 52 : 0,
+    // Keep the annotation gutter inside this view's bounds. Android clips
+    // absolutely positioned children that extend beyond their parent, while
+    // desktop renderers allow that overflow.
+    paddingRight: hasMemos ? 52 : 0,
   });
 
 const rowProgressOverlayStyle = (
@@ -77,7 +78,7 @@ const rowProgressOverlayStyle = (
 const rowMemoBadgeStyle = (topPx: number, rowHeight: number) =>
   new Style<View>({
     position: "absolute",
-    right: -50,
+    right: 2,
     top: topPx,
     height: rowHeight,
     minWidth: 24,
