@@ -1,6 +1,7 @@
 import { ImageSettings } from "image_settings/src/ImageSettingsComponent";
 import { Preferences } from "app_settings/src/Preferences";
 import { Token } from "constants/src/SerialConstants";
+import { Mode } from "constants/src/StateMachineConstants";
 import {
   Stk500FlashSession,
   Stk500FlashResult,
@@ -12,7 +13,7 @@ import { ValueNotifier } from "./ValueNotifier";
 import { AudioFeedbackSink } from "./AudioFeedback";
 import { getMissingImageKnitMessage } from "./AppUiState";
 import { SIMULATION_PORT } from "./SerialPortList";
-import { MachineJob } from "machine_job/src/MachineJobTypes";
+import { MachineJob, OperatorPrompt } from "machine_job/src/MachineJobTypes";
 
 export const KNIT_FINISHED_MESSAGE: FeedbackMessage = {
   text: "Pattern completed",
@@ -45,6 +46,12 @@ export interface RunAppKnitCallbacks {
 export interface RunMachineJobSimulationCallbacks extends RunAppKnitCallbacks {
   /** Called, and awaited, after each simulated pass reaches a safe boundary. */
   onPassCompleted?: (passIndex: number, passId: string) => Promise<void> | void;
+  onOperatorPrompt: (
+    prompt: OperatorPrompt,
+    timing: "before" | "after",
+    passIndex: number,
+  ) => Promise<void> | void;
+  onPassKnitted?: (passIndex: number, passId: string) => Promise<void> | void;
 }
 
 let activeKnitRun: Promise<void> | undefined;
@@ -142,6 +149,11 @@ export async function runAppMachineJobSimulation(
   job: MachineJob,
   params: Pick<RunAppKnitParams, "isKnitting" | "preferences" | "audio"> & {
     startPassIndex?: number;
+    acknowledgedPromptIds?: string[];
+    resumePendingAfterPass?: boolean;
+    serialPort?: string;
+    mode?: Mode;
+    numColors?: number;
   },
   callbacks: RunMachineJobSimulationCallbacks,
 ): Promise<void> {
@@ -151,11 +163,21 @@ export async function runAppMachineJobSimulation(
   }
   if (params.isKnitting) return;
 
-  const startResult = KnitSession.tryStartMachineJobSimulation({
+  const startParams = {
     job,
     preferences: params.preferences,
     startPassIndex: params.startPassIndex,
-  });
+    acknowledgedPromptIds: params.acknowledgedPromptIds,
+    resumePendingAfterPass: params.resumePendingAfterPass,
+  };
+  const startResult = params.serialPort
+    ? KnitSession.tryStartMachineJobHardware({
+        ...startParams,
+        serialPort: params.serialPort,
+        mode: params.mode ?? Mode.SINGLEBED,
+        numColors: params.numColors ?? 2,
+      })
+    : KnitSession.tryStartMachineJobSimulation(startParams);
   if (!startResult.ok) {
     callbacks.onValidationError({
       text: startResult.message,
@@ -174,9 +196,17 @@ export async function runAppMachineJobSimulation(
       onFeedback: callbacks.onFeedback,
       quietMode: params.preferences.quietMode,
       audio: params.audio,
+      onOperatorPrompt: callbacks.onOperatorPrompt,
+      onPassKnitted: callbacks.onPassKnitted
+        ? async (passIndex) => {
+            const passId = job.rows.flatMap((row) => row.passes)[passIndex]?.passId;
+            if (passId === undefined) throw new Error(`Knitted pass ${passIndex} is not present in the machine job.`);
+            await callbacks.onPassKnitted!(passIndex, passId);
+          }
+        : undefined,
       onPassCompleted: callbacks.onPassCompleted
         ? async (passIndex) => {
-            const passId = job.rows[passIndex]?.passes[0]?.passId;
+            const passId = job.rows.flatMap((row) => row.passes)[passIndex]?.passId;
             if (passId === undefined) {
               throw new Error(
                 `Completed pass ${passIndex} is not present in the machine job.`,

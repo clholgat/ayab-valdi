@@ -1,5 +1,5 @@
 import "jasmine/src/jasmine";
-import { CheckpointRepository, AtomicCheckpointStore } from "knit_session/src/CheckpointRepository";
+import { CheckpointRepository, AtomicCheckpointStore, parseExecutionCheckpoint } from "knit_session/src/CheckpointRepository";
 import { completePass, createCheckpoint } from "knit_session/src/CheckpointTransitions";
 import { finishCheckpoint } from "knit_session/src/CheckpointTransitions";
 
@@ -18,6 +18,24 @@ const identity = { jobId: "job-1", checksum: "sha256:abc" };
 const context = { identity, machineProfileId: "ayab-200", passIds: ["pass-1", "pass-2"] };
 
 describe("CheckpointRepository", () => {
+  it("migrates a version-1 checkpoint to the current durable pass phase", () => {
+    const migrated = parseExecutionCheckpoint(JSON.stringify({
+      version: 1,
+      revision: 0,
+      identity,
+      machineProfileId: "ayab-200",
+      status: "active",
+      nextPassIndex: 0,
+      expectedSide: "unknown",
+      acknowledgedPromptIds: [],
+      yarnAssignments: [],
+      corrections: [],
+      createdAt: "t0",
+      updatedAt: "t0",
+    }));
+    expect(migrated.version).toBe(2);
+    expect(migrated.pendingAfterPass).toBeUndefined();
+  });
   it("falls back to the previous generation when current is corrupt", async () => {
     const store = new MemoryStore();
     const repository = new CheckpointRepository(store, "execution");

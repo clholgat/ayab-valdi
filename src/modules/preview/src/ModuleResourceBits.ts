@@ -48,14 +48,52 @@ export function parseModuleResource(
   return { module, stem };
 }
 
-function moduleFileBytes(module: string, stem: string): Uint8Array | null {
-  let bytes: Uint8Array;
+export function moduleEntryBytesFromWebRegistry(
+  entries: Record<string, string> | undefined,
+  path: string,
+): Uint8Array | null {
+  if (!entries) return null;
+  const encoded =
+    entries[path] ??
+    Object.entries(entries).find(([key]) => key.endsWith(`/${path}`))?.[1];
+  if (typeof encoded !== "string") return null;
   try {
-    bytes = getModuleFileEntryAsBytes(module, `src/patterns/${stem}.png.bin`);
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
   } catch {
     return null;
   }
+}
+
+function moduleFileBytes(module: string, stem: string): Uint8Array | null {
+  const path = `src/patterns/${stem}.png.bin`;
+  let bytes: Uint8Array | null = null;
+  try {
+    bytes = getModuleFileEntryAsBytes(module, path);
+  } catch {
+    // The collapsed web package prefixes source-repository paths onto module
+    // entries. Fall through to a suffix lookup in that generated registry.
+  }
+  if (!bytes || !looksLikePng(bytes)) {
+    const registry = (
+      globalThis as typeof globalThis & {
+        __valdiModuleEntries?: Record<string, Record<string, string>>;
+      }
+    ).__valdiModuleEntries;
+    bytes = moduleEntryBytesFromWebRegistry(registry?.[module], path);
+  }
   return bytes && looksLikePng(bytes) ? bytes : null;
+}
+
+/** Exact source bytes for metadata readers (pixel decoders discard PNG comments). */
+export function moduleResourceBytes(source: string): Uint8Array | undefined {
+  const resource = parseModuleResource(source);
+  if (!resource) return undefined;
+  return moduleFileBytes(resource.module, resource.stem) ?? undefined;
 }
 
 /** A data URL backed by the exact bundled bytes for web canvas decoding. */
@@ -64,7 +102,7 @@ export function moduleResourceDataUrl(source: string): string | undefined {
   if (!resource) {
     return undefined;
   }
-  const bytes = moduleFileBytes(resource.module, resource.stem);
+  const bytes = moduleResourceBytes(source);
   if (!bytes) {
     return undefined;
   }

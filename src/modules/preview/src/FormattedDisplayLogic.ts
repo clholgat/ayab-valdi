@@ -8,6 +8,25 @@ export interface PixelCell {
   borderColor: string;
 }
 
+export interface VisibleRowMemo {
+  rowIndex: number;
+  memo: string;
+}
+
+/** Non-empty AYAB memo codes, retaining their top-down image row index. */
+export function visibleRowMemos(
+  memos: string[] | undefined,
+  rowCount: number,
+): VisibleRowMemo[] {
+  if (!memos || rowCount <= 0) return [];
+  const result: VisibleRowMemo[] = [];
+  for (let rowIndex = 0; rowIndex < Math.min(memos.length, rowCount); rowIndex++) {
+    const memo = memos[rowIndex]?.trim();
+    if (memo && memo !== "0") result.push({ rowIndex, memo });
+  }
+  return result;
+}
+
 export interface ComputePixelGridOptions {
   bits: Uint8Array[][];
   machineWidth?: number;

@@ -16,6 +16,8 @@ export function computeZoomContentKey(
 
 export interface ZoomablePreviewViewportViewModel {
   bits: Uint8Array[][];
+  /** AYAB memo codes aligned top-down with image rows ("0" means none). */
+  rowMemos?: string[];
   imageWidth: number;
   imageHeight: number;
   machineWidth?: number;

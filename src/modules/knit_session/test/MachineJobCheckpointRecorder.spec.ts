@@ -49,4 +49,37 @@ describe("MachineJobCheckpointRecorder", () => {
     await resumed.recordCompletedPass(1, "pass-2", "left");
     expect(resumed.snapshot().status).toBe("completed");
   });
+
+  it("persists operator acknowledgements before the next pass", async () => {
+    const store = new MemoryStore();
+    const recorder = await MachineJobCheckpointRecorder.start(
+      new CheckpointRepository(store, "active"),
+      {
+        identity: { jobId: "job", checksum: "sha256:value" },
+        machineProfileId: "machine:0",
+        totalPasses: 2,
+        now: () => "now",
+      },
+    );
+    await recorder.recordAcknowledgedPrompt("shape-before");
+    expect(recorder.snapshot().acknowledgedPromptIds).toEqual(["shape-before"]);
+    expect(store.values["active"]).toContain("shape-before");
+  });
+
+  it("persists the knitted boundary before an after-pass acknowledgement", async () => {
+    const store = new MemoryStore();
+    const recorder = await MachineJobCheckpointRecorder.start(
+      new CheckpointRepository(store, "active"),
+      {
+        identity: { jobId: "job", checksum: "sha256:value" },
+        machineProfileId: "machine:0",
+        totalPasses: 2,
+        now: () => "now",
+      },
+    );
+    await recorder.recordPassKnitted(0, "pass-1", "right");
+    expect(recorder.snapshot().nextPassIndex).toBe(0);
+    expect(recorder.snapshot().pendingAfterPass?.passId).toBe("pass-1");
+    expect(store.values.active).toContain("pendingAfterPass");
+  });
 });

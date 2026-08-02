@@ -52,9 +52,38 @@ export function completePass(
   if (passIndex !== checkpoint.nextPassIndex) {
     throw new Error(`Expected pass ${checkpoint.nextPassIndex}, got ${passIndex}.`);
   }
+  if (
+    checkpoint.pendingAfterPass &&
+    (checkpoint.pendingAfterPass.passIndex !== passIndex || checkpoint.pendingAfterPass.passId !== passId)
+  ) {
+    throw new Error("Completed pass does not match the knitted pending pass.");
+  }
   return updated(checkpoint, now, {
     nextPassIndex: passIndex + 1,
     lastCompletedPassId: passId,
+    expectedSide,
+    pendingAfterPass: undefined,
+  });
+}
+
+export function markPassKnitted(
+  checkpoint: ExecutionCheckpoint,
+  passIndex: number,
+  passId: string,
+  expectedSide: PassSide,
+  now: string,
+): ExecutionCheckpoint {
+  if (passIndex !== checkpoint.nextPassIndex) {
+    throw new Error(`Expected pass ${checkpoint.nextPassIndex}, got ${passIndex}.`);
+  }
+  if (checkpoint.pendingAfterPass) {
+    if (checkpoint.pendingAfterPass.passIndex === passIndex && checkpoint.pendingAfterPass.passId === passId) {
+      return checkpoint;
+    }
+    throw new Error("A different knitted pass is already awaiting after-pass prompts.");
+  }
+  return updated(checkpoint, now, {
+    pendingAfterPass: { passIndex, passId, expectedSide },
     expectedSide,
   });
 }
@@ -84,6 +113,7 @@ export function rewindToPass(
     nextPassIndex: passIndex,
     lastCompletedPassId: previousPassId,
     expectedSide,
+    pendingAfterPass: undefined,
     corrections: checkpoint.corrections.concat({
       kind: "rewind",
       fromPassIndex: checkpoint.nextPassIndex,

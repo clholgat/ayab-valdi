@@ -20,8 +20,9 @@ import {
   CoreButtonSizing,
 } from "widgets/src/components/button/CoreButton";
 import {
-  SAMPLE_PATTERN_LIST_ITEMS,
+  SAMPLE_PATTERN_SECTIONS,
   SamplePattern,
+  SamplePatternCategory,
   resolveSamplePatternImageSrc,
 } from "./SamplePatterns";
 
@@ -32,24 +33,34 @@ export interface SamplePatternsModalViewModel {
 
 export class SamplePatternsModal extends StatefulComponent<
   SamplePatternsModalViewModel,
-  Record<string, never>
+  { activeSection?: SamplePatternCategory }
 > {
+  state: { activeSection?: SamplePatternCategory } = {};
   private selectHandlers: Record<string, () => void> = {};
+  private sectionHandlers: Record<string, () => void> = {};
 
   onCreate(): void {
-    for (const item of SAMPLE_PATTERN_LIST_ITEMS) {
-      if (item.kind !== "pattern") {
-        continue;
-      }
-      const pattern = item.sample;
-      this.selectHandlers[pattern.id] = () => {
-        this.viewModel.onSelect(pattern);
+    for (const section of SAMPLE_PATTERN_SECTIONS) {
+      this.sectionHandlers[section.id] = () => {
+        this.setState({ activeSection: section.id });
       };
+      for (const pattern of section.patterns) {
+        this.selectHandlers[pattern.id] = () => {
+          this.viewModel.onSelect(pattern);
+        };
+      }
     }
   }
 
+  private handleBack = (): void => {
+    this.setState({ activeSection: undefined });
+  };
+
   onRender(): void {
     const vm = this.viewModel;
+    const activeSection = SAMPLE_PATTERN_SECTIONS.find(
+      section => section.id === this.state.activeSection,
+    );
     <view
       accessibilityId="preview-samples-modal"
       key="preview-samples-modal"
@@ -69,7 +80,10 @@ export class SamplePatternsModal extends StatefulComponent<
       >
         <layout style={styles.dialogInner}>
           <layout style={styles.headerRow}>
-            <label style={styles.title} value="Sample patterns" />
+            <label
+              style={styles.title}
+              value={activeSection?.title ?? "Sample patterns"}
+            />
             <ModalCloseButton
               accessibilityId="preview-samples-modal-close"
               onTap={vm.onClose}
@@ -80,35 +94,58 @@ export class SamplePatternsModal extends StatefulComponent<
             style={styles.scrollArea}
           >
             <layout style={styles.scrollContent}>
-              {SAMPLE_PATTERN_LIST_ITEMS.map((item) =>
-                item.kind === "header" ? (
-                  <label
-                    key={item.id}
-                    style={styles.sectionTitle}
-                    value={item.title}
-                  />
-                ) : (
+              {activeSection ? (
+                <view
+                  accessibilityId="preview-samples-back"
+                  style={styles.folderRow}
+                  onTap={this.handleBack}
+                  touchAreaExtension={4}
+                >
+                  <label style={styles.folderIcon} value="‹" />
+                  <label style={styles.folderLabel} value="All folders" />
+                </view>
+              ) : null}
+              {(activeSection?.patterns ?? []).map(item => (
                   <view
-                    key={item.sample.id}
-                    accessibilityId={item.sample.accessibilityId}
+                    key={item.id}
+                    accessibilityId={item.accessibilityId}
                     style={styles.listRow}
-                    onTap={this.selectHandlers[item.sample.id]}
+                    onTap={this.selectHandlers[item.id]}
                     touchAreaExtension={4}
                   >
                     <view style={styles.thumbnailFrame}>
                       <image
-                        src={resolveSamplePatternImageSrc(item.sample)}
+                        src={resolveSamplePatternImageSrc(item)}
                         objectFit="contain"
                         style={styles.thumbnail}
                       />
                     </view>
                     <label
                       style={styles.listLabel}
-                      value={item.sample.label}
+                      value={item.label}
                     />
                   </view>
-                ),
-              )}
+              ))}
+              {!activeSection
+                ? SAMPLE_PATTERN_SECTIONS.map(section => (
+                    <view
+                      key={section.id}
+                      accessibilityId={`preview-samples-folder-${section.id}`}
+                      style={styles.folderRow}
+                      onTap={this.sectionHandlers[section.id]}
+                      touchAreaExtension={4}
+                    >
+                      <label style={styles.folderIcon} value="›" />
+                      <layout style={styles.folderText}>
+                        <label style={styles.folderLabel} value={section.title} />
+                        <label
+                          style={styles.folderCount}
+                          value={`${section.patterns.length} patterns`}
+                        />
+                      </layout>
+                    </view>
+                  ))
+                : null}
             </layout>
           </scroll>
           <layout style={styles.footerRow}>
@@ -205,6 +242,39 @@ const styles = {
     marginLeft: 8,
     marginTop: 8,
     marginBottom: 4,
+    flexShrink: 0,
+  }),
+  folderRow: new Style<View>({
+    width: "100%",
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 12,
+    paddingRight: 12,
+    paddingTop: 8,
+    paddingBottom: 8,
+    flexShrink: 0,
+  }),
+  folderIcon: new Style<Label>({
+    width: 28,
+    font: sansFont(28),
+    color: TEXT_SECONDARY,
+    flexShrink: 0,
+  }),
+  folderText: new Style<Layout>({
+    flexGrow: 1,
+    flexShrink: 1,
+    flexDirection: "column",
+  }),
+  folderLabel: new Style<Label>({
+    font: sansFont(16),
+    color: TEXT_PRIMARY,
+    flexShrink: 0,
+  }),
+  folderCount: new Style<Label>({
+    font: sansFont(13),
+    color: TEXT_SECONDARY,
+    marginTop: 2,
     flexShrink: 0,
   }),
   listRow: new Style<View>({

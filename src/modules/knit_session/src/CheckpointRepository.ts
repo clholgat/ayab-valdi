@@ -20,12 +20,21 @@ function isStringArray(value: any): boolean {
 }
 
 export function parseExecutionCheckpoint(text: string): ExecutionCheckpoint {
-  const value: any = JSON.parse(text);
+  let value: any = JSON.parse(text);
+  if (value?.version === 1) {
+    value = { ...value, version: EXECUTION_CHECKPOINT_VERSION };
+  }
   if (!value || value.version !== EXECUTION_CHECKPOINT_VERSION) throw new Error("Unsupported checkpoint version.");
   if (!value.identity || typeof value.identity.jobId !== "string" || typeof value.identity.checksum !== "string") throw new Error("Invalid checkpoint job identity.");
   if (typeof value.machineProfileId !== "string" || typeof value.revision !== "number") throw new Error("Invalid checkpoint metadata.");
   if (["active", "completed", "cancelled"].indexOf(value.status) < 0) throw new Error("Invalid checkpoint status.");
   if (!Number.isInteger(value.nextPassIndex) || value.nextPassIndex < 0) throw new Error("Invalid checkpoint pass position.");
+  if (value.pendingAfterPass !== undefined) {
+    const pending = value.pendingAfterPass;
+    if (!pending || !Number.isInteger(pending.passIndex) || typeof pending.passId !== "string" || ["left", "right", "unknown"].indexOf(pending.expectedSide) < 0) {
+      throw new Error("Invalid checkpoint pending pass.");
+    }
+  }
   if (!isStringArray(value.acknowledgedPromptIds) || !Array.isArray(value.yarnAssignments) || !Array.isArray(value.corrections)) throw new Error("Invalid checkpoint execution state.");
   if (typeof value.createdAt !== "string" || typeof value.updatedAt !== "string") throw new Error("Invalid checkpoint timestamps.");
   return value as ExecutionCheckpoint;

@@ -15,7 +15,7 @@ import { Preferences } from "app_settings/src/Preferences";
 import { ImageSettings } from "image_settings/src/ImageSettingsComponent";
 import { Feedback, FeedbackMessage } from "./Feedback";
 import { AudioFeedbackSink } from "./AudioFeedback";
-import { MachineJob } from "machine_job/src/MachineJobTypes";
+import { MachineJob, OperatorPrompt } from "machine_job/src/MachineJobTypes";
 import {
   MachineJobKnitPlan,
   machineJobToKnitPlan,
@@ -46,12 +46,30 @@ export interface KnitSessionCallbacks {
   audio?: AudioFeedbackSink;
   /** Awaited after a machine-job pattern row reaches a safe pass boundary. */
   onPassCompleted?: (passIndex: number) => Promise<void> | void;
+  /** Awaited immediately after the carriage pass, before any after-pass prompt is shown. */
+  onPassKnitted?: (passIndex: number) => Promise<void> | void;
+  /** Awaited at a safe MachineJob pass boundary; resolving resumes Simulation. */
+  onOperatorPrompt?: (
+    prompt: OperatorPrompt,
+    timing: "before" | "after",
+    passIndex: number,
+  ) => Promise<void> | void;
 }
 
 export interface MachineJobSimulationStartParams {
   job: MachineJob;
   preferences: Preferences;
   startPassIndex?: number;
+  acknowledgedPromptIds?: string[];
+  /** The saved pass was physically knitted; resume at its after-pass prompts without
+   * sending its row to the machine again. */
+  resumePendingAfterPass?: boolean;
+}
+
+export interface MachineJobHardwareStartParams extends MachineJobSimulationStartParams {
+  serialPort: string;
+  mode: Mode;
+  numColors: number;
 }
 
 export class KnitSession {
@@ -62,9 +80,17 @@ export class KnitSession {
   private constructor(
     control: Control,
     private readonly passIndexOffset: number = 0,
+    private readonly machineJobPlan?: MachineJobKnitPlan,
+    acknowledgedPromptIds: string[] = [],
+    private readonly resumeAfterPassIndex?: number,
   ) {
     this.control = control;
+    for (const promptId of acknowledgedPromptIds) {
+      this.handledPromptIds.add(promptId);
+    }
   }
+
+  private readonly handledPromptIds = new Set<string>();
 
   static buildPattern(params: KnitStartParams): Pattern {
     const { imageBits, imageWidth, imageHeight, settings, preferences } =
@@ -144,6 +170,7 @@ export class KnitSession {
   static buildMachineJobPattern(
     plan: MachineJobKnitPlan,
     startPassIndex: number = 0,
+    mode: Mode = Mode.SINGLEBED,
   ): Pattern {
     const width = plan.rightNeedle - plan.leftNeedle + 1;
     const remainingPasses = plan.passes.slice(startPassIndex);
@@ -161,7 +188,7 @@ export class KnitSession {
     pattern.endNeedle = plan.rightNeedle + 1;
     pattern.knitStartNeedle = plan.leftNeedle;
     pattern.knitEndNeedle = plan.rightNeedle + 1;
-    pattern.mode = Mode.SINGLEBED;
+    pattern.mode = mode;
     return pattern;
   }
 
@@ -169,10 +196,31 @@ export class KnitSession {
   static tryStartMachineJobSimulation(
     params: MachineJobSimulationStartParams,
   ): KnitStartResult {
+    return KnitSession.tryStartMachineJobWithConfiguration(params, Mode.SINGLEBED, 2, "Simulation");
+  }
+
+  static tryStartMachineJobHardware(params: MachineJobHardwareStartParams): KnitStartResult {
+    if (!params.serialPort || params.serialPort === "Simulation") {
+      return { ok: false, message: "Select a physical knitting-machine connection first." };
+    }
+    return KnitSession.tryStartMachineJobWithConfiguration(
+      params,
+      params.mode,
+      params.numColors,
+      params.serialPort,
+    );
+  }
+
+  private static tryStartMachineJobWithConfiguration(
+    params: MachineJobSimulationStartParams,
+    mode: Mode,
+    numColors: number,
+    portname: string,
+  ): KnitStartResult {
     const capabilities = ayabMachineCapabilities({
       machine: params.preferences.machine,
-      mode: Mode.SINGLEBED,
-      numColors: 2,
+      mode,
+      numColors,
     });
     const preflight = preflightMachineJob(params.job, capabilities);
     if (!preflight.compatible) {
@@ -186,17 +234,21 @@ export class KnitSession {
     if (startPassIndex < 0 || startPassIndex >= compiled.plan.passes.length) {
       return { ok: false, message: "Resume pass position is out of range." };
     }
+    const patternStartIndex = params.resumePendingAfterPass
+      ? startPassIndex + 1
+      : startPassIndex;
     const pattern = KnitSession.buildMachineJobPattern(
       compiled.plan,
-      startPassIndex,
+      patternStartIndex,
+      mode,
     );
     const control = new Control();
     control.start(
       pattern,
       {
         machine: params.preferences.machine,
-        mode: Mode.SINGLEBED,
-        num_colors: 2,
+        mode,
+        num_colors: numColors,
         start_row: 0,
         inf_repeat: false,
         start_needle: compiled.plan.leftNeedle,
@@ -204,14 +256,20 @@ export class KnitSession {
         alignment: Alignment.LEFT,
         auto_mirror: false,
         continuous_reporting: false,
-        portname: "Simulation",
+        portname,
         prefs: params.preferences,
       },
       Operation.KNIT,
     );
     return {
       ok: true,
-      session: new KnitSession(control, startPassIndex),
+      session: new KnitSession(
+        control,
+        patternStartIndex,
+        compiled.plan,
+        params.acknowledgedPromptIds,
+        params.resumePendingAfterPass ? startPassIndex : undefined,
+      ),
     };
   }
 
@@ -237,6 +295,14 @@ export class KnitSession {
     callbacks: KnitSessionCallbacks,
   ): Promise<"finished" | "cancelled"> {
     let lastCompletedPassIndex = -1;
+    if (this.resumeAfterPassIndex !== undefined) {
+      await this.emitOperatorPrompts(callbacks, this.resumeAfterPassIndex, "after");
+      if (callbacks.onPassCompleted) await callbacks.onPassCompleted(this.resumeAfterPassIndex);
+      lastCompletedPassIndex = this.resumeAfterPassIndex;
+      if (this.passIndexOffset >= (this.machineJobPlan?.passes.length ?? 0)) {
+        this.control.state = StateMachineState.FINISHED;
+      }
+    }
     while (
       !this.cancelled &&
       this.control.state !== StateMachineState.FINISHED
@@ -261,6 +327,15 @@ export class KnitSession {
           break;
         }
 
+        const nextPassIndex =
+          this.passIndexOffset + Math.max(0, this.control.status.currentRow);
+        await this.emitOperatorPrompts(
+          callbacks,
+          nextPassIndex,
+          "before",
+        );
+        if (this.cancelled) break;
+
         const output = await this.control
           .operate_async(Operation.KNIT)
           .catch(function (err: any) {
@@ -280,12 +355,21 @@ export class KnitSession {
         const completedPassIndex =
           this.passIndexOffset + this.control.status.currentRow - 1;
         if (
-          callbacks.onPassCompleted &&
           completedPassIndex >= 0 &&
           completedPassIndex !== lastCompletedPassIndex
         ) {
           try {
-            await callbacks.onPassCompleted(completedPassIndex);
+            if (callbacks.onPassKnitted) {
+              await callbacks.onPassKnitted(completedPassIndex);
+            }
+            await this.emitOperatorPrompts(
+              callbacks,
+              completedPassIndex,
+              "after",
+            );
+            if (callbacks.onPassCompleted) {
+              await callbacks.onPassCompleted(completedPassIndex);
+            }
             lastCompletedPassIndex = completedPassIndex;
           } catch (error) {
             // A pass is not durable until its checkpoint succeeds. Stop before
@@ -309,6 +393,27 @@ export class KnitSession {
       this.control.stop();
     }
     return this.cancelled ? "cancelled" : "finished";
+  }
+
+  private async emitOperatorPrompts(
+    callbacks: KnitSessionCallbacks,
+    passIndex: number,
+    timing: "before" | "after",
+  ): Promise<void> {
+    const pass = this.machineJobPlan?.passes[passIndex];
+    if (!pass) return;
+    const prompts = timing === "before" ? pass.promptsBefore : pass.promptsAfter;
+    for (const prompt of prompts) {
+      if (this.handledPromptIds.has(prompt.id)) continue;
+      if (!callbacks.onOperatorPrompt) {
+        if (prompt.acknowledgementRequired) {
+          throw new Error(`Operator prompt "${prompt.id}" requires acknowledgement.`);
+        }
+      } else {
+        await callbacks.onOperatorPrompt(prompt, timing, passIndex);
+      }
+      this.handledPromptIds.add(prompt.id);
+    }
   }
 
   private static emitFeedback(

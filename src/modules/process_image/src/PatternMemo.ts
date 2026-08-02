@@ -27,6 +27,16 @@ export function parseAyabMemos(comment: string | undefined): string[] {
   return comment.slice(MEMO_HEADER.length).split("");
 }
 
+/** PNG memo data follows knitting order (bottom row first); bitmaps are top-down. */
+export function storedAyabMemosToImageRows(memos: ReadonlyArray<string>): string[] {
+  return memos.slice().reverse();
+}
+
+/** Converts top-down editor/preview rows to AYAB's bottom-up PNG memo order. */
+export function imageRowsToStoredAyabMemos(memos: ReadonlyArray<string>): string[] {
+  return memos.slice().reverse();
+}
+
 /** True if `memos` carries any row-level memo (i.e. is worth showing in UI). */
 export function hasAnyMemo(memos: ReadonlyArray<string>): boolean {
   return memos.some((memo) => memo !== NO_MEMO);

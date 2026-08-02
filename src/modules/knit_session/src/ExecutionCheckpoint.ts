@@ -1,4 +1,4 @@
-export const EXECUTION_CHECKPOINT_VERSION = 1;
+export const EXECUTION_CHECKPOINT_VERSION = 2;
 
 export type CheckpointStatus = "active" | "completed" | "cancelled";
 export type PassSide = "left" | "right" | "unknown";
@@ -29,6 +29,13 @@ export interface ExecutionCheckpoint {
   status: CheckpointStatus;
   /** The first pass that has not reached a safe completion boundary. */
   nextPassIndex: number;
+  /** The machine has knitted this pass, but its after-pass prompts have not all reached
+   * their durable acknowledgement boundary. Resume must not knit this pass again. */
+  pendingAfterPass?: {
+    passIndex: number;
+    passId: string;
+    expectedSide: PassSide;
+  };
   lastCompletedPassId?: string;
   expectedSide: PassSide;
   acknowledgedPromptIds: string[];
@@ -60,6 +67,15 @@ export function validateCheckpointForResume(
     checkpoint.identity.checksum !== context.identity.checksum
   ) {
     return { ok: false, message: "Checkpoint belongs to a different job." };
+  }
+  if (checkpoint.pendingAfterPass) {
+    const pending = checkpoint.pendingAfterPass;
+    if (
+      pending.passIndex !== checkpoint.nextPassIndex ||
+      context.passIds[pending.passIndex] !== pending.passId
+    ) {
+      return { ok: false, message: "Checkpoint pending pass identity does not match the job." };
+    }
   }
   if (checkpoint.machineProfileId !== context.machineProfileId) {
     return { ok: false, message: "Checkpoint uses a different machine profile." };

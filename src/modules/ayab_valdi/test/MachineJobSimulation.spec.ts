@@ -136,4 +136,79 @@ describe("MachineJob Simulation", () => {
       0x00, 0x02, 0x01, 0x00,
     ]);
   });
+
+  it("pauses for before/after operator prompts in boundary order", async () => {
+    const value = job();
+    value.rows = [value.rows[0]!];
+    value.rows[0]!.promptsBefore.push({
+      id: "shape-before",
+      kind: "shape",
+      severity: "warning",
+      text: "Decrease one stitch at each edge.",
+      acknowledgementRequired: true,
+    });
+    value.rows[0]!.promptsAfter.push({
+      id: "manual-after",
+      kind: "manualAction",
+      severity: "warning",
+      text: "Transfer the edge stitches.",
+      acknowledgementRequired: true,
+    });
+    const result = KnitSession.tryStartMachineJobSimulation({
+      job: value,
+      preferences: new Preferences(new InMemoryPreferenceStorage()),
+    });
+    expect(result.ok).toBeTrue();
+    if (!result.ok) return;
+
+    const events: string[] = [];
+    await result.session.run({
+      onStatusVersion: () => undefined,
+      isDestroyed: () => false,
+      onOperatorPrompt: async (prompt, timing, passIndex) => {
+        events.push(`${timing}:${passIndex}:${prompt.id}`);
+      },
+    });
+    expect(events).toEqual([
+      "before:0:shape-before",
+      "after:0:manual-after",
+    ]);
+  });
+
+  it("resumes a knitted pass at after-prompts without knitting it twice", async () => {
+    const value = job();
+    value.rows = [value.rows[0]!];
+    value.rows[0]!.promptsBefore.push({
+      id: "before",
+      kind: "confirm",
+      severity: "warning",
+      text: "Before",
+      acknowledgementRequired: true,
+    });
+    value.rows[0]!.promptsAfter.push({
+      id: "after",
+      kind: "manualAction",
+      severity: "warning",
+      text: "After",
+      acknowledgementRequired: true,
+    });
+    const result = KnitSession.tryStartMachineJobSimulation({
+      job: value,
+      preferences: new Preferences(new InMemoryPreferenceStorage()),
+      startPassIndex: 0,
+      resumePendingAfterPass: true,
+      acknowledgedPromptIds: ["before"],
+    });
+    expect(result.ok).toBeTrue();
+    if (!result.ok) return;
+    const events: string[] = [];
+    await result.session.run({
+      onStatusVersion: () => undefined,
+      isDestroyed: () => false,
+      onPassKnitted: () => { events.push("knitted-again"); },
+      onOperatorPrompt: (prompt, timing) => { events.push(`${timing}:${prompt.id}`); },
+      onPassCompleted: () => { events.push("completed"); },
+    });
+    expect(events).toEqual(["after:after", "completed"]);
+  });
 });

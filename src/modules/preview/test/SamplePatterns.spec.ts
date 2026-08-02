@@ -1,5 +1,6 @@
 import {
   patternRegistryKey,
+  resolveSamplePatternSources,
   SAMPLE_PATTERN_SECTIONS,
 } from "../src/SamplePatterns";
 
@@ -14,6 +15,20 @@ describe("SamplePatterns", () => {
   it("keeps dotted KH-910 filenames as registry keys", () => {
     expect(patternRegistryKey("1.01.png")).toBe("1.01");
     expect(patternRegistryKey("10.36.png")).toBe("10.36");
+  });
+
+  it("keeps the byte-exact module resource as the load source on web", () => {
+    const sample = SAMPLE_PATTERN_SECTIONS[0]!.patterns[0]!;
+    expect(
+      resolveSamplePatternSources(
+        sample,
+        "data:image/png;base64,exact-bytes",
+        "/bundled/thumbnail.png",
+      ),
+    ).toEqual({
+      imageSrc: "data:image/png;base64,exact-bytes",
+      loadSource: sample.resource,
+    });
   });
 
   it("includes every locally synced annotated AYAB pattern", () => {

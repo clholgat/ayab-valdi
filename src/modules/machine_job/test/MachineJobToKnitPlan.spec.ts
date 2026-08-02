@@ -56,14 +56,18 @@ describe("machineJobToKnitPlan", () => {
     }
   });
 
-  it("supports changing bounds but rejects multi-pass rows and blocking prompts", () => {
+  it("supports changing bounds, blocking prompts, and multi-pass rows", () => {
     const value = job();
     value.rows[1]!.passes[0]!.activeNeedles.left = 9;
     value.rows[1]!.passes[0]!.selection = {
       encoding: "indices",
       indices: [9, 16],
     };
-    value.rows[0]!.passes.push({ ...value.rows[0]!.passes[0]!, passId: "extra" });
+    value.rows[0]!.passes.push({
+      ...value.rows[0]!.passes[0]!,
+      passId: "extra",
+      direction: "rightToLeft",
+    });
     value.rows[1]!.promptsBefore.push({
       id: "confirm",
       kind: "confirm",
@@ -72,8 +76,36 @@ describe("machineJobToKnitPlan", () => {
       acknowledgementRequired: true,
     });
     const result = machineJobToKnitPlan(value);
-    expect(result.ok).toBeFalse();
-    if (!result.ok) expect(result.issues.length).toBe(2);
+    expect(result.ok).toBeTrue();
+    if (result.ok) expect(result.plan.passes.length).toBe(3);
+  });
+
+  it("schedules every supported operator prompt at its pass boundary", () => {
+    const value = job();
+    value.rows[0]!.promptsBefore.push({
+      id: "shape-before",
+      kind: "shape",
+      severity: "warning",
+      text: "Decrease one stitch at each edge.",
+      acknowledgementRequired: true,
+    });
+    value.rows[0]!.promptsAfter.push({
+      id: "yarn-after",
+      kind: "yarnChange",
+      severity: "critical",
+      text: "Change to yarn B.",
+      acknowledgementRequired: true,
+      yarnId: "b",
+    });
+    const result = machineJobToKnitPlan(value);
+    expect(result.ok).toBeTrue();
+    if (!result.ok) return;
+    expect(result.plan.passes[0]!.promptsBefore.map((prompt) => prompt.id)).toEqual([
+      "shape-before",
+    ]);
+    expect(result.plan.passes[0]!.promptsAfter.map((prompt) => prompt.id)).toEqual([
+      "yarn-after",
+    ]);
   });
 
   it("zero-fills selections outside each shaped pass inside the job envelope", () => {
@@ -91,6 +123,54 @@ describe("machineJobToKnitPlan", () => {
       expect(Array.from(result.plan.passes[1]!.selectionBits)).toEqual([132, 0]);
       expect(result.plan.passes[1]!.activeNeedles).toEqual({ left: 10, right: 15 });
     }
+  });
+
+  it("plans ribber techniques, carriage roles, accessories, and multiple physical passes", () => {
+    const value = job();
+    value.requirements.techniques = ["classicRibber"];
+    value.requirements.carriageRoles = ["ribber"];
+    value.requirements.accessories = ["ribber"];
+    value.rows = [value.rows[0]!];
+    value.rows[0]!.passes[0]!.technique = "classicRibber";
+    value.rows[0]!.passes[0]!.carriage = "ribber";
+    value.rows[0]!.passes.push({
+      ...value.rows[0]!.passes[0]!,
+      passId: "p1-back-bed",
+      direction: "rightToLeft",
+      yarnIds: ["a"],
+    });
+    value.rows[0]!.promptsBefore.push({
+      id: "install-ribber",
+      kind: "carriageChange",
+      severity: "warning",
+      text: "Install the ribber carriage.",
+      acknowledgementRequired: true,
+      carriage: "ribber",
+    });
+    value.rows[0]!.promptsAfter.push({
+      id: "row-done",
+      kind: "confirm",
+      severity: "info",
+      text: "Ribber row complete.",
+      acknowledgementRequired: false,
+    });
+
+    const result = machineJobToKnitPlan(value);
+    expect(result.ok).toBeTrue();
+    if (!result.ok) return;
+    expect(result.plan.accessories).toEqual(["ribber"]);
+    expect(result.plan.passes.map((pass) => ({
+      technique: pass.technique,
+      carriage: pass.carriage,
+      yarnIds: pass.yarnIds,
+    }))).toEqual([
+      { technique: "classicRibber", carriage: "ribber", yarnIds: ["a", "b"] },
+      { technique: "classicRibber", carriage: "ribber", yarnIds: ["a"] },
+    ]);
+    expect(result.plan.passes[0]!.promptsBefore[0]!.id).toBe("install-ribber");
+    expect(result.plan.passes[0]!.promptsAfter).toEqual([]);
+    expect(result.plan.passes[1]!.promptsBefore).toEqual([]);
+    expect(result.plan.passes[1]!.promptsAfter[0]!.id).toBe("row-done");
   });
 
   it("rejects non-alternating explicit directions", () => {

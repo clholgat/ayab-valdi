@@ -5,6 +5,7 @@ import {
 } from "constants/src/NeedleColors";
 import {
   computePixelGrid,
+  visibleRowMemos,
   rgbaToHexColor,
   rgbIntToHex,
 } from "preview/src/FormattedDisplayLogic";
@@ -55,6 +56,15 @@ describe("FormattedDisplayLogic", () => {
       });
       expect(rows[0][0].borderColor).toBe(NEEDLE_GRID_BORDER_LEFT);
       expect(rows[0][1].borderColor).toBe(NEEDLE_GRID_BORDER_RIGHT);
+    });
+  });
+
+  describe("visibleRowMemos", () => {
+    it("keeps annotations aligned to their image rows and hides empty memos", () => {
+      expect(visibleRowMemos(["0", "3", "", "7", "9"], 4)).toEqual([
+        { rowIndex: 1, memo: "3" },
+        { rowIndex: 3, memo: "7" },
+      ]);
     });
   });
 });

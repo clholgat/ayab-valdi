@@ -1,11 +1,31 @@
 import "jasmine/src/jasmine";
 import {
   loadModuleResourceBits,
+  moduleResourceBytes,
+  moduleEntryBytesFromWebRegistry,
   moduleResourceDataUrl,
   parseModuleResource,
 } from "preview/src/ModuleResourceBits";
+import { readPngComment } from "process_image/src/PngMetadata";
+import {
+  parseAyabMemos,
+  storedAyabMemosToImageRows,
+} from "process_image/src/PatternMemo";
 
 describe("parseModuleResource", () => {
+  it("finds collapsed web module entries by their source-path suffix", () => {
+    const bytes = moduleEntryBytesFromWebRegistry(
+      {
+        "../ayab_valdi+/modules/preview/src/patterns/triangles.png.bin":
+          "iVBORw0KGgo=",
+      },
+      "src/patterns/triangles.png.bin",
+    );
+    expect(Array.from(bytes ?? [])).toEqual([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+  });
+
   it("parses module:stem refs", () => {
     expect(parseModuleResource("preview:spaceinvader_33x32")).toEqual({
       module: "preview",
@@ -41,6 +61,22 @@ describe("loadModuleResourceBits", () => {
     );
     expect(dataUrl).toBeDefined();
     expect(dataUrl!.startsWith("data:image/png;base64,iVBORw0KGgo")).toBeTrue();
+  });
+
+  it("orients StitchWorld 94 memos like the printed chart", () => {
+    const bytes = moduleResourceBytes("preview:annotated/stitchworld-094");
+    expect(bytes).toBeDefined();
+    const imageRows = storedAyabMemosToImageRows(
+      parseAyabMemos(readPngComment(bytes!)),
+    );
+
+    // The original StitchWorld chart prints memo 4 at the soldier's hat,
+    // memo 3 through the body, and memo 2 at the feet. The PNG Comment is
+    // stored in knitting order (bottom first), so image display reverses it.
+    expect(imageRows.length).toBe(66);
+    expect(imageRows.slice(0, 10).join("")).toBe("0404040404");
+    expect(imageRows.slice(20, 30).join("")).toBe("0404030303");
+    expect(imageRows.slice(56).join("")).toBe("0303030302");
   });
 
   it("decodes a bundled sample at exact pixel dimensions", async () => {

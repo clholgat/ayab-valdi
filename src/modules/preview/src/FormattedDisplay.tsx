@@ -2,7 +2,7 @@
 
 import { StatefulComponent } from "valdi_core/src/Component";
 import { Style } from "valdi_core/src/Style";
-import { View, Layout } from "valdi_tsx/src/NativeTemplateElements";
+import { View, Layout, Label } from "valdi_tsx/src/NativeTemplateElements";
 import {
   NEEDLE_BAR_GREEN,
   NEEDLE_BAR_ORANGE,
@@ -10,8 +10,10 @@ import {
 import { PREVIEW_BAR_HEIGHT } from "./PreviewSceneLayout";
 import {
   computePixelGrid,
+  visibleRowMemos,
   type PixelCell,
 } from "./FormattedDisplayLogic";
+import { sansBoldFont } from "constants/src/Typography";
 
 const barRowWrapperStyle = new Style<View>({
   position: "relative",
@@ -48,11 +50,15 @@ const imageGridOffsetStyle = (offsetPx: number) =>
     marginLeft: offsetPx,
   });
 
-const imageGridWrapperStyle = new Style<View>({
-  position: "relative",
-  flexShrink: 0,
-  alignSelf: "flex-start",
-});
+const imageGridWrapperStyle = (hasMemos: boolean) =>
+  new Style<View>({
+    position: "relative",
+    flexShrink: 0,
+    alignSelf: "flex-start",
+    // Reserve an outside gutter only when the pattern actually carries row
+    // annotations. The badges must never obscure stitch pixels.
+    marginRight: hasMemos ? 52 : 0,
+  });
 
 const rowProgressOverlayStyle = (
   heightPx: number,
@@ -68,8 +74,31 @@ const rowProgressOverlayStyle = (
     backgroundColor: "rgba(127,127,127,0.5)",
   });
 
+const rowMemoBadgeStyle = (topPx: number, rowHeight: number) =>
+  new Style<View>({
+    position: "absolute",
+    right: -50,
+    top: topPx,
+    height: rowHeight,
+    minWidth: 24,
+    paddingLeft: 3,
+    paddingRight: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(253,230,138,0.92)",
+    borderColor: "#92400E",
+    borderWidth: 0.5,
+  });
+
+const rowMemoLabelStyle = (rowHeight: number) =>
+  new Style<Label>({
+    font: sansBoldFont(Math.max(6, Math.min(11, rowHeight - 2))),
+    color: "#451A03",
+  });
+
 export interface FormattedDisplayViewModel {
   bits: Uint8Array[][];
+  rowMemos?: string[];
   stitchSize?: number;
   stitchSizeY?: number;
   machineWidth?: number;
@@ -201,11 +230,13 @@ export class FormattedDisplay extends StatefulComponent<
   private renderImageGrid(
     pixelRows: PixelCell[][],
     stitchStyle: Style<View>,
+    rowMemos: string[] | undefined,
+    stitchSizeY: number,
     rowProgressOverlayPx?: number,
     rowProgressOverlayWidthPx?: number,
     rowProgressOverlayLeftPx?: number,
   ): void {
-    <view style={imageGridWrapperStyle}>
+    <view style={imageGridWrapperStyle(visibleRowMemos(rowMemos, pixelRows.length).length > 0)}>
       {(() => {
         for (let rowIndex = 0; rowIndex < pixelRows.length; rowIndex++) {
           const rowCells = pixelRows[rowIndex];
@@ -236,6 +267,22 @@ export class FormattedDisplay extends StatefulComponent<
           )}
         />
       ) : undefined}
+      {(() => {
+        for (const annotation of visibleRowMemos(rowMemos, pixelRows.length)) {
+          <view
+            accessibilityId={`preview-row-memo-${annotation.rowIndex}`}
+            style={rowMemoBadgeStyle(
+              annotation.rowIndex * stitchSizeY,
+              stitchSizeY,
+            )}
+          >
+            <label
+              style={rowMemoLabelStyle(stitchSizeY)}
+              value={`Memo ${annotation.memo}`}
+            />
+          </view>;
+        }
+      })()}
     </view>;
   }
 
@@ -264,6 +311,8 @@ export class FormattedDisplay extends StatefulComponent<
               {this.renderImageGrid(
                 s.pixelRows,
                 s.stitchStyle,
+                vm.rowMemos,
+                vm.stitchSizeY ?? vm.stitchSize ?? DEFAULT_STITCH,
                 vm.rowProgressOverlayPx,
                 vm.rowProgressOverlayWidthPx,
                 vm.rowProgressOverlayLeftPx,
@@ -276,7 +325,12 @@ export class FormattedDisplay extends StatefulComponent<
       ) : (
         <layout style={styles.plainImageColumn}>
           <layout style={styles.plainImageGrid}>
-            {this.renderImageGrid(s.pixelRows, s.stitchStyle)}
+            {this.renderImageGrid(
+              s.pixelRows,
+              s.stitchStyle,
+              vm.rowMemos,
+              vm.stitchSizeY ?? vm.stitchSize ?? DEFAULT_STITCH,
+            )}
           </layout>
         </layout>
       )}

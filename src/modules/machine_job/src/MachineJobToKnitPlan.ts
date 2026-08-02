@@ -1,4 +1,9 @@
-import { MachineJob, MachinePass, PassDirection } from "./MachineJobTypes";
+import {
+  MachineJob,
+  MachinePass,
+  OperatorPrompt,
+  PassDirection,
+} from "./MachineJobTypes";
 
 export interface MachineJobPlanPass {
   rowNumber: number;
@@ -6,6 +11,11 @@ export interface MachineJobPlanPass {
   direction: Exclude<PassDirection, "either">;
   selectionBits: Uint8Array;
   activeNeedles: { left: number; right: number };
+  promptsBefore: OperatorPrompt[];
+  promptsAfter: OperatorPrompt[];
+  technique: string;
+  carriage?: string;
+  yarnIds: string[];
 }
 
 export interface MachineJobKnitPlan {
@@ -14,6 +24,8 @@ export interface MachineJobKnitPlan {
   leftNeedle: number;
   rightNeedle: number;
   yarnIds: string[];
+  carriageRoles: string[];
+  accessories: string[];
   passes: MachineJobPlanPass[];
 }
 
@@ -73,9 +85,9 @@ function passIssue(
 
 /**
  * Compiles the deliberately conservative first execution subset:
- * one pass per logical row, knit carriage, <=2 colors,
- * stockinette/fair-isle selection, alternating carriage direction, and only
- * non-blocking informational prompts.
+ * physical passes in their declared logical-row order, AYAB knit/ribber modes,
+ * and alternating carriage direction.
+ * Operator prompts are retained at their safe pass boundaries for the runtime.
  */
 export function machineJobToKnitPlan(job: MachineJob): MachineJobPlanResult {
   const issues: MachineJobPlanIssue[] = [];
@@ -93,52 +105,31 @@ export function machineJobToKnitPlan(job: MachineJob): MachineJobPlanResult {
       : "leftToRight";
   const planPasses: MachineJobPlanPass[] = [];
 
+  const supportedTechniques = [
+    "stockinette",
+    "fairIsle",
+    "classicRibber",
+    "middleColorsTwiceRibber",
+    "heartOfPlutoRibber",
+    "circularRibber",
+  ];
   job.rows.forEach((row, rowIndex) => {
-    for (const [promptIndex, prompt] of [
-      ...row.promptsBefore,
-      ...row.promptsAfter,
-    ].entries()) {
-      if (prompt.kind !== "info" || prompt.acknowledgementRequired) {
-        issues.push({
-          path: `$.rows[${rowIndex}].prompts[${promptIndex}]`,
-          message: "execution subset supports only non-blocking informational prompts",
-          rowNumber: row.rowNumber,
-        });
-      }
-    }
-    if (row.passes.length !== 1) {
-      issues.push({
-        path: `$.rows[${rowIndex}].passes`,
-        message: "execution subset requires exactly one pass per logical row",
-        rowNumber: row.rowNumber,
-      });
-      return;
-    }
-    const pass = row.passes[0]!;
-    const path = `$.rows[${rowIndex}].passes[0]`;
-    if (pass.technique !== "fairIsle" && pass.technique !== "stockinette") {
+    row.passes.forEach((pass, passIndex) => {
+    const path = `$.rows[${rowIndex}].passes[${passIndex}]`;
+    if (!supportedTechniques.includes(pass.technique)) {
       passIssue(
         issues,
         `${path}.technique`,
-        "execution subset supports only 'fairIsle' and 'stockinette'",
+        `unsupported AYAB technique '${pass.technique}'`,
         row.rowNumber,
         pass,
       );
     }
-    if (pass.carriage !== undefined && pass.carriage !== "knit") {
+    if (pass.carriage !== undefined && pass.carriage !== "knit" && pass.carriage !== "ribber") {
       passIssue(
         issues,
         `${path}.carriage`,
-        "execution subset supports only the knit carriage",
-        row.rowNumber,
-        pass,
-      );
-    }
-    if (pass.yarnIds.length > 2) {
-      passIssue(
-        issues,
-        `${path}.yarnIds`,
-        "execution subset supports at most two yarns per pass",
+        "execution subset supports only the knit and ribber carriage roles",
         row.rowNumber,
         pass,
       );
@@ -158,8 +149,14 @@ export function machineJobToKnitPlan(job: MachineJob): MachineJobPlanResult {
       direction: expectedDirection,
       selectionBits: packSelection(pass, leftNeedle, envelopeWidth),
       activeNeedles: { ...pass.activeNeedles },
+      promptsBefore: passIndex === 0 ? row.promptsBefore.slice() : [],
+      promptsAfter: passIndex === row.passes.length - 1 ? row.promptsAfter.slice() : [],
+      technique: pass.technique,
+      carriage: pass.carriage,
+      yarnIds: pass.yarnIds.slice(),
     });
     expectedDirection = reverseDirection(expectedDirection);
+    });
   });
 
   if (issues.length > 0) return { ok: false, issues };
@@ -171,6 +168,8 @@ export function machineJobToKnitPlan(job: MachineJob): MachineJobPlanResult {
       leftNeedle,
       rightNeedle,
       yarnIds: job.yarns.map((yarn) => yarn.id),
+      carriageRoles: (job.requirements.carriageRoles ?? []).slice(),
+      accessories: (job.requirements.accessories ?? []).slice(),
       passes: planPasses,
     },
   };

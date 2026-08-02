@@ -175,6 +175,7 @@ export class ZoomablePreviewViewport extends StatefulComponent<
       previousViewModel.autoMirror !== this.viewModel.autoMirror ||
       previousViewModel.currentRow !== this.viewModel.currentRow ||
       previousViewModel.isKnitting !== this.viewModel.isKnitting ||
+      previousViewModel.rowMemos !== this.viewModel.rowMemos ||
       previousViewModel.bits !== this.viewModel.bits
     ) {
       this.commitSceneUpdate(this.applySceneUpdate(this.state.zoomScale));
@@ -285,6 +286,7 @@ export class ZoomablePreviewViewport extends StatefulComponent<
               {scene.hasMachineScene ? (
                 <FormattedDisplay
                   bits={bits}
+                  rowMemos={vm.rowMemos}
                   stitchSize={scene.stitchSize}
                   stitchSizeY={scene.stitchSizeY}
                   machineWidth={vm.machineWidth}
@@ -301,6 +303,7 @@ export class ZoomablePreviewViewport extends StatefulComponent<
               ) : (
                 <FormattedDisplay
                   bits={bits}
+                  rowMemos={vm.rowMemos}
                   stitchSize={scene.stitchSize}
                   stitchSizeY={scene.stitchSizeY}
                 />

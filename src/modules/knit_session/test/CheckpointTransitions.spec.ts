@@ -4,6 +4,7 @@ import {
   completePass,
   createCheckpoint,
   finishCheckpoint,
+  markPassKnitted,
   rewindToPass,
 } from "knit_session/src/CheckpointTransitions";
 import { validateCheckpointForResume } from "knit_session/src/ExecutionCheckpoint";
@@ -18,6 +19,16 @@ describe("checkpoint transitions", () => {
     expect(advanced.nextPassIndex).toBe(1);
     expect(advanced.lastCompletedPassId).toBe("pass-1");
     expect(() => completePass(advanced, 0, "pass-1", "right", "t2")).toThrow();
+  });
+
+  it("durably separates a knitted pass from its pending after-pass prompts", () => {
+    const initial = createCheckpoint({ identity, machineProfileId: "ayab-200", now: "t0" });
+    const knitted = markPassKnitted(initial, 0, "pass-1", "right", "t1");
+    expect(knitted.nextPassIndex).toBe(0);
+    expect(knitted.pendingAfterPass).toEqual({ passIndex: 0, passId: "pass-1", expectedSide: "right" });
+    const completed = completePass(knitted, 0, "pass-1", "right", "t2");
+    expect(completed.nextPassIndex).toBe(1);
+    expect(completed.pendingAfterPass).toBeUndefined();
   });
 
   it("retains acknowledgements and an explicit rewind audit", () => {

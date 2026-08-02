@@ -1,6 +1,7 @@
 import { Device } from "valdi_core/src/Device";
 import { loadCatalog } from "valdi_core/src/AssetCatalog";
 import { ANNOTATED_PATTERN_FILES } from "./AnnotatedPatternFiles";
+import { moduleResourceDataUrl } from "./ModuleResourceBits";
 
 export type SamplePatternCategory = "featured" | "annotated" | "kh910";
 
@@ -209,20 +210,30 @@ export const SAMPLE_PATTERNS: SamplePattern[] = SAMPLE_PATTERN_SECTIONS.flatMap(
   (section) => section.patterns,
 );
 
+export function resolveSamplePatternSources(
+  sample: SamplePattern,
+  exactDataUrl?: string,
+  catalogUrl?: string,
+): { imageSrc: string; loadSource: string } {
+  return {
+    imageSrc: exactDataUrl ?? catalogUrl ?? sample.resource,
+    loadSource: sample.resource,
+  };
+}
+
 export function resolveSamplePatternImageSrc(sample: SamplePattern): string {
-  const url = resolveWebImageUrl(sample);
-  if (url) {
-    return url;
-  }
-  return sample.resource;
+  const exactDataUrl = Device.isWeb()
+    ? moduleResourceDataUrl(sample.resource)
+    : undefined;
+  return resolveSamplePatternSources(
+    sample,
+    exactDataUrl,
+    resolveWebImageUrl(sample),
+  ).imageSrc;
 }
 
 export function resolveSamplePatternSource(sample: SamplePattern): string {
-  const url = resolveWebImageUrl(sample);
-  if (url) {
-    return url;
-  }
-  return sample.resource;
+  return resolveSamplePatternSources(sample).loadSource;
 }
 
 function resolveWebImageUrl(sample: SamplePattern): string | undefined {

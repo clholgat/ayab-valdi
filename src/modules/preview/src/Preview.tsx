@@ -33,6 +33,7 @@ import { Device } from "valdi_core/src/Device";
 import { getBits } from "process_image/src/ProcessImageNative";
 import {
   loadModuleResourceBits,
+  moduleResourceBytes,
   moduleResourceDataUrl,
   parseModuleResource,
 } from "./ModuleResourceBits";
@@ -46,7 +47,10 @@ import {
 } from "process_image/src/PatternFileLoader";
 import { dataUrlToBytes } from "process_image/src/PatternImportBinary";
 import { readPngComment } from "process_image/src/PngMetadata";
-import { parseAyabMemos } from "process_image/src/PatternMemo";
+import {
+  parseAyabMemos,
+  storedAyabMemosToImageRows,
+} from "process_image/src/PatternMemo";
 import {
   FilePicker,
   FilePickerOnSelectEvent,
@@ -59,10 +63,7 @@ import {
 import { ZoomablePreviewViewport } from "./ZoomablePreviewViewport";
 import { computeZoomContentKey } from "./PreviewViewportTypes";
 import { getPreviewSideLabel } from "./KnitSidePreviewLogic";
-import {
-  SamplePattern,
-  resolveSamplePatternSource,
-} from "./SamplePatterns";
+import { SamplePattern, resolveSamplePatternSource } from "./SamplePatterns";
 import { SamplePatternsModal } from "./SamplePatternsModal";
 import {
   SIDEBAR_CARD_BACKGROUND,
@@ -103,11 +104,19 @@ export interface PreviewViewModel {
   /** Bumped when parent updates image bits outside this component. */
   imageBitsRevision?: number;
   syncedBits?: Uint8Array[][];
+  /** Transformed AYAB memo codes aligned with syncedBits. */
+  rowMemos?: string[];
   /** Highlights the pattern panel during first-run tour. */
   tourHighlighted?: boolean;
   /** Selected hardware/settings facts used only for read-only job preflight. */
   machineJobCapabilities?: MachineCapabilities;
   onSimulateMachineJob?: (
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    resumePassIndex?: number,
+  ) => void;
+  onKnitMachineJob?: (
     job: MachineJob,
     identity: MachineJobIdentity,
     profileId: string,
@@ -124,6 +133,7 @@ interface State {
   bits?: Uint8Array[][];
   width?: number;
   height?: number;
+  memos?: string[];
   samplePickerOpen?: boolean;
   machineJobFileName?: string;
   machineJobInspection?: InspectMachineJobResult;
@@ -218,6 +228,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
       selectedImageName: fileName,
       width,
       height,
+      memos,
     });
     this.viewModel.onBitsLoaded?.(bits, width, height, {
       fileName,
@@ -237,10 +248,14 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
   private extractMemos(event: FilePickerOnSelectEvent): string[] {
     try {
       if (event.dataUrl) {
-        return parseAyabMemos(readPngComment(dataUrlToBytes(event.dataUrl)));
+        return storedAyabMemosToImageRows(
+          parseAyabMemos(readPngComment(dataUrlToBytes(event.dataUrl))),
+        );
       }
       if (event.path && typeof readFileBytes === "function") {
-        return parseAyabMemos(readPngComment(readFileBytes(event.path)));
+        return storedAyabMemosToImageRows(
+          parseAyabMemos(readPngComment(readFileBytes(event.path))),
+        );
       }
     } catch (error) {
       console.error("Failed to read pattern memo metadata:", error);
@@ -269,6 +284,10 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     // loadModuleResourceBits's pixel-exact path is correct and preferred
     // (Android R drawables are density-resampled and unusable otherwise).
     if (parseModuleResource(source)) {
+      const bytes = moduleResourceBytes(source);
+      const memos = bytes
+        ? storedAyabMemosToImageRows(parseAyabMemos(readPngComment(bytes)))
+        : [];
       const dataUrl = Device.isWeb() ? moduleResourceDataUrl(source) : undefined;
       if (dataUrl && typeof getBitsAsync !== "undefined" && getBitsAsync) {
         getBitsAsync(dataUrl)
@@ -276,7 +295,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
             if (this.isDestroyed() || generation !== this.loadGeneration) {
               return;
             }
-            this.applyBits(bits, fileName, userSelected);
+            this.applyBits(bits, fileName, userSelected, memos);
           })
           .catch((error: unknown) => {
             console.error("Failed to load sample:", error);
@@ -289,7 +308,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
             return;
           }
           if (bits) {
-            this.applyBits(bits, fileName, userSelected);
+            this.applyBits(bits, fileName, userSelected, memos);
             return;
           }
           console.error("Failed to load sample: no bits for " + source);
@@ -474,6 +493,19 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     this.startMachineJobSimulation(undefined);
   };
 
+  private handleKnitMachineJob = (): void => {
+    const inspection = this.state.machineJobInspection;
+    const capabilities = this.viewModel.machineJobCapabilities;
+    if (inspection?.ok && this.state.machineJobIdentity && capabilities && inspection.preflight.compatible) {
+      this.viewModel.onKnitMachineJob?.(
+        inspection.job,
+        this.state.machineJobIdentity,
+        capabilities.profileId,
+        this.state.machineJobCheckpoint?.nextPassIndex,
+      );
+    }
+  };
+
   private handleResumeMachineJob = (): void => {
     this.startMachineJobSimulation(
       this.state.machineJobCheckpoint?.nextPassIndex,
@@ -637,16 +669,6 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
                 font={BUTTON_FONT_SMALL}
               />
             </layout>
-            <layout style={styles.filePickerRow}>
-              <label style={styles.openPatternLabel} value="Open machine job" />
-              <layout style={styles.filePickerWrapNoButton}>
-                <FilePicker
-                  accept="application/json,.json,.machine-job.json"
-                  readContent={Device.isWeb()}
-                  onSelect={this.handleMachineJobSelect}
-                />
-              </layout>
-            </layout>
             {this.renderMachineJobInspection()}
             {this.state.selectedImageName ? (
               <view accessibilityId="preview-image-name">
@@ -681,6 +703,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
               <layout style={styles.previewViewportWrapper}>
                 <ZoomablePreviewViewport
                   bits={this.state.bits!}
+                  rowMemos={this.viewModel.rowMemos ?? this.state.memos}
                   imageWidth={this.state.width!}
                   imageHeight={this.state.height!}
                   machineWidth={this.viewModel.machineWidth}
@@ -841,6 +864,17 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
             sizing={CoreButtonSizing.SMALL}
             font={BUTTON_FONT_SMALL}
           />
+          {this.viewModel.onKnitMachineJob ? (
+            <CoreButton
+              accessibilityId="machine-job-knit"
+              text={checkpoint ? "Resume on machine" : "Knit job on machine"}
+              onTap={this.handleKnitMachineJob}
+              disabled={this.viewModel.isKnitting === true || this.state.machineJobRecoveryLoading === true}
+              coloring={CoreButtonColoring.PRIMARY}
+              sizing={CoreButtonSizing.SMALL}
+              font={BUTTON_FONT_SMALL}
+            />
+          ) : undefined}
         </layout>
       ) : undefined}
       {this.state.machineJobRecoveryLoading ? (
@@ -911,12 +945,6 @@ const styles = {
     minWidth: 0,
     flexDirection: "row",
     marginRight: 8,
-  }),
-  filePickerWrapNoButton: new Style<Layout>({
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 0,
-    flexDirection: "row",
   }),
   jobCard: new Style<View>({
     width: "100%",

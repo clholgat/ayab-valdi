@@ -68,10 +68,11 @@ import {
   sendAppHardwareTestCommand,
   awaitActiveKnitRun,
 } from "./AppSessions";
-import { MachineJob } from "machine_job/src/MachineJobTypes";
+import { MachineJob, OperatorPrompt } from "machine_job/src/MachineJobTypes";
 import { MachineJobIdentity, PassSide } from "knit_session/src/ExecutionCheckpoint";
 import { CheckpointRepository } from "knit_session/src/CheckpointRepository";
 import { MachineJobCheckpointRecorder } from "knit_session/src/MachineJobCheckpointRecorder";
+import { MachineJobPromptModal } from "./MachineJobPromptModal";
 import { createDefaultCheckpointStore } from "knit_session/src/PersistentCheckpointStore";
 
 /**
@@ -146,6 +147,11 @@ interface State {
    */
   compactLayout?: boolean;
   sidebarDrawerOpen: boolean;
+  machineJobPrompt?: {
+    prompt: OperatorPrompt;
+    timing: "before" | "after";
+    passIndex: number;
+  };
 }
 
 /**
@@ -197,6 +203,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     memos?: string[];
   };
   private machineJobSimulationActive = false;
+  private pendingMachineJobPromptResolve?: () => void;
 
   state: State = {
     preferences: new Preferences(),
@@ -425,6 +432,15 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       profileId,
       resumePassIndex,
     );
+  };
+
+  private handleKnitMachineJob = (
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    resumePassIndex?: number,
+  ): void => {
+    void this.startMachineJobSimulation(job, identity, profileId, resumePassIndex, true);
   };
 
   private handleHardwareTestClose = (): void => {
@@ -785,6 +801,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
               onBitsLoaded={this.handleBitsLoaded}
               imageBitsRevision={this.state.imageBitsRevision}
               syncedBits={this.state.imageBits}
+              rowMemos={this.state.rowMemos}
               knitSession={session}
               isKnitting={this.state.isKnitting}
               statusNotifier={this.knitStatusNotifier}
@@ -805,6 +822,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
                 numColors: this.state.currentImageSettings?.numColors ?? 2,
               })}
               onSimulateMachineJob={this.handleSimulateMachineJob}
+              onKnitMachineJob={this.state.selectedSerialPort ? this.handleKnitMachineJob : undefined}
               initialMachineJobJson={this.viewModel.initialMachineJobJson}
               initialMachineJobFileName={this.viewModel.initialMachineJobFileName}
               initialMachineJobRevision={this.viewModel.initialMachineJobRevision}
@@ -849,6 +867,14 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             logNotifier={this.flashLogNotifier}
             doneNotifier={this.flashDoneNotifier}
             onClose={this.handleFlashFirmwareClose}
+          />
+        ) : undefined}
+        {this.state.machineJobPrompt ? (
+          <MachineJobPromptModal
+            prompt={this.state.machineJobPrompt.prompt}
+            timing={this.state.machineJobPrompt.timing}
+            passIndex={this.state.machineJobPrompt.passIndex}
+            onAcknowledge={this.handleMachineJobPromptAcknowledge}
           />
         ) : undefined}
       </PreferencesProvider>
@@ -913,6 +939,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     identity: MachineJobIdentity,
     profileId: string,
     requestedResumePassIndex?: number,
+    useHardware: boolean = false,
   ): Promise<void> => {
     const totalPasses = job.rows.reduce(
       (total, row) => total + row.passes.length,
@@ -974,6 +1001,11 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
         preferences: this.state.preferences,
         audio: this.audioSink,
         startPassIndex: requestedResumePassIndex,
+        acknowledgedPromptIds: recorder.snapshot().acknowledgedPromptIds,
+        resumePendingAfterPass: recorder.snapshot().pendingAfterPass !== undefined,
+        serialPort: useHardware ? this.state.selectedSerialPort : undefined,
+        mode: this.state.currentImageSettings?.mode ?? this.state.preferences.defaultKnittingMode,
+        numColors: this.state.currentImageSettings?.numColors ?? 2,
       },
       {
         onValidationError: (message) => this.setState({ userMessage: message }),
@@ -995,14 +1027,30 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
             expectedSide,
           );
         },
+        onPassKnitted: async (passIndex, passId) => {
+          const leftToRight =
+            (firstDirection === "leftToRight") === (passIndex % 2 === 0);
+          const expectedSide: PassSide = leftToRight ? "right" : "left";
+          await recorder.recordPassKnitted(passIndex, passId, expectedSide);
+        },
+        onOperatorPrompt: async (prompt, timing, passIndex) => {
+          await new Promise<void>((resolve) => {
+            this.pendingMachineJobPromptResolve = resolve;
+            this.setState({ machineJobPrompt: { prompt, timing, passIndex } });
+          });
+          if (prompt.acknowledgementRequired) {
+            await recorder.recordAcknowledgedPrompt(prompt.id);
+          }
+        },
         onKnitFinished: () => {
           this.machineJobSimulationActive = false;
           this.knitStatusNotifier.set(0);
           this.setState({
             isKnitting: false,
             knitSession: undefined,
+            machineJobPrompt: undefined,
             userMessage: {
-              text: "Machine job simulation completed",
+              text: useHardware ? "Machine job completed" : "Machine job simulation completed",
               level: "success",
             },
           });
@@ -1013,8 +1061,11 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
           this.setState({
             isKnitting: false,
             knitSession: undefined,
+            machineJobPrompt: undefined,
             userMessage: {
-              text: "An error occurred while simulating the machine job.",
+              text: useHardware
+                ? "An error occurred while knitting the machine job. Progress was retained."
+                : "An error occurred while simulating the machine job.",
               level: "error",
             },
           });
@@ -1022,6 +1073,13 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
         isDestroyed: () => this.isDestroyed(),
       },
     );
+  };
+
+  private handleMachineJobPromptAcknowledge = (): void => {
+    const resolve = this.pendingMachineJobPromptResolve;
+    this.pendingMachineJobPromptResolve = undefined;
+    this.setState({ machineJobPrompt: undefined });
+    resolve?.();
   };
 
   private startHardwareTest = async (): Promise<void> => {

@@ -36,6 +36,8 @@ export interface PreviewPanelViewModel {
   /** Bumped when parent updates image bits (e.g. repeat from Image Settings). */
   imageBitsRevision?: number;
   syncedBits?: Uint8Array[][];
+  /** AYAB memo codes aligned with the transformed preview rows. */
+  rowMemos?: string[];
   knitSession?: KnitSession;
   isKnitting: boolean;
   statusNotifier?: ValueNotifier<number>;
@@ -48,6 +50,12 @@ export interface PreviewPanelViewModel {
   tourBubble?: ActiveTourBubble | null;
   machineJobCapabilities?: MachineCapabilities;
   onSimulateMachineJob?: (
+    job: MachineJob,
+    identity: MachineJobIdentity,
+    profileId: string,
+    resumePassIndex?: number,
+  ) => void;
+  onKnitMachineJob?: (
     job: MachineJob,
     identity: MachineJobIdentity,
     profileId: string,
@@ -134,9 +142,11 @@ export class PreviewPanel extends StatefulComponent<
             onBitsLoaded={vm.onBitsLoaded}
             imageBitsRevision={vm.imageBitsRevision}
             syncedBits={vm.syncedBits}
+            rowMemos={vm.rowMemos}
             tourHighlighted={vm.tourHighlighted}
             machineJobCapabilities={vm.machineJobCapabilities}
             onSimulateMachineJob={vm.onSimulateMachineJob}
+            onKnitMachineJob={vm.onKnitMachineJob}
             initialMachineJobJson={vm.initialMachineJobJson}
             initialMachineJobFileName={vm.initialMachineJobFileName}
             initialMachineJobRevision={vm.initialMachineJobRevision}

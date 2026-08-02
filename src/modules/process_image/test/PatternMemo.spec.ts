@@ -1,5 +1,10 @@
 import "jasmine/src/jasmine";
-import { hasAnyMemo, parseAyabMemos } from "process_image/src/PatternMemo";
+import {
+  imageRowsToStoredAyabMemos,
+  hasAnyMemo,
+  parseAyabMemos,
+  storedAyabMemosToImageRows,
+} from "process_image/src/PatternMemo";
 
 describe("parseAyabMemos", () => {
   it("parses one memo digit per row from the ayab-patterns#4 worked example", () => {
@@ -35,6 +40,16 @@ describe("parseAyabMemos", () => {
 
   it("returns [] for an empty header with no codes", () => {
     expect(parseAyabMemos("AYAB:")).toEqual([]);
+  });
+});
+
+describe("AYAB memo row orientation", () => {
+  it("maps bottom-up stored knitting rows to top-down bitmap rows", () => {
+    expect(storedAyabMemosToImageRows(["2", "0", "3", "4"])).toEqual(["4", "3", "0", "2"]);
+  });
+
+  it("maps top-down editor rows back to bottom-up PNG storage", () => {
+    expect(imageRowsToStoredAyabMemos(["4", "3", "0", "2"])).toEqual(["2", "0", "3", "4"]);
   });
 });
 

@@ -1,5 +1,11 @@
 import { CheckpointRepository } from "./CheckpointRepository";
-import { completePass, createCheckpoint, finishCheckpoint } from "./CheckpointTransitions";
+import {
+  acknowledgePrompt,
+  completePass,
+  createCheckpoint,
+  finishCheckpoint,
+  markPassKnitted,
+} from "./CheckpointTransitions";
 import { ExecutionCheckpoint, MachineJobIdentity, PassSide } from "./ExecutionCheckpoint";
 
 export interface CheckpointRecorderStartParams {
@@ -76,6 +82,30 @@ export class MachineJobCheckpointRecorder {
     if (next.nextPassIndex === this.totalPasses) {
       next = finishCheckpoint(next, "completed", this.now());
     }
+    await this.repository.save(next);
+    this.checkpoint = next;
+  }
+
+  async recordPassKnitted(
+    passIndex: number,
+    passId: string,
+    expectedSide: PassSide,
+  ): Promise<void> {
+    const next = markPassKnitted(
+      this.checkpoint,
+      passIndex,
+      passId,
+      expectedSide,
+      this.now(),
+    );
+    if (next === this.checkpoint) return;
+    await this.repository.save(next);
+    this.checkpoint = next;
+  }
+
+  async recordAcknowledgedPrompt(promptId: string): Promise<void> {
+    const next = acknowledgePrompt(this.checkpoint, promptId, this.now());
+    if (next === this.checkpoint) return;
     await this.repository.save(next);
     this.checkpoint = next;
   }
