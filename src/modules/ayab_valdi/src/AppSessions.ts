@@ -36,6 +36,7 @@ export interface RunAppKnitParams {
 export interface RunAppKnitCallbacks {
   onValidationError: (message: FeedbackMessage) => void;
   onKnitStarted: (session: KnitSession) => void;
+  onKnitReady?: () => void;
   onStatusVersion: (version: number) => void;
   onFeedback: (message: FeedbackMessage) => void;
   onKnitFinished: () => void;
@@ -116,6 +117,7 @@ export async function runAppKnit(
       onStatusVersion: callbacks.onStatusVersion,
       isDestroyed: callbacks.isDestroyed,
       onFeedback: callbacks.onFeedback,
+      onReady: callbacks.onKnitReady,
       quietMode: params.preferences.quietMode,
       audio: params.audio,
     })

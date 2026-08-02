@@ -23,6 +23,18 @@ const SLIP_ESC_ESC = 0xdd;
 // state machine's polling loop permanently instead of just failing that one poll.
 export const READ_API6_TIMEOUT_MS = 5000;
 
+function protocolTokenName(value: number | undefined): string {
+  if (value == null) return "none";
+  return (Token as any)[value] ?? `0x${value.toString(16).padStart(2, "0")}`;
+}
+
+function protocolHex(data: Uint8Array, limit: number = 32): string {
+  const shown = Array.from(data.slice(0, limit))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join(" ");
+  return data.length > limit ? `${shown} …` : shown;
+}
+
 /**
  * setTimeout/clearTimeout, preferring Valdi's original (unpatched) timing
  * functions when available and bound to globalThis - matches the pattern used
@@ -317,6 +329,18 @@ export class Communication implements ICommunication {
     flags: number,
     lineData: Uint8Array,
   ) {
+    let selectedCount = 0;
+    for (const byte of lineData) {
+      let value = byte;
+      while (value !== 0) {
+        selectedCount += value & 1;
+        value >>>= 1;
+      }
+    }
+    console.log(
+      `[SerialProtocol] cnfLine line=${lineNumber} color=${color} flags=${flags} ` +
+        `bytes=${lineData.length} selectedBits=${selectedCount}`,
+    );
     const header = new Uint8Array([
       Token.cnfLine.valueOf(),
       lineNumber,
@@ -376,6 +400,10 @@ export class Communication implements ICommunication {
 
   // Write data with SLIP encoding
   private write_API6(data: Uint8Array): void {
+    console.log(
+      `[SerialProtocol] TX ${protocolTokenName(data[0])} payloadBytes=${data.length} ` +
+        `raw=${protocolHex(data)}`,
+    );
     const encoded = this.slipEncode(data);
     this.write(encoded);
   }
@@ -511,8 +539,13 @@ export class Communication implements ICommunication {
       try {
         if (typeof registerDataAvailableResolver === "function") {
           removeResolver = registerDataAvailableResolver(resolveFn);
-          // Don't do anything else - just return the promise
-          // The resolver will be called asynchronously when data arrives
+          // Close the lost-wakeup window between the pre-registration read
+          // above and installing the resolver. Android may have buffered a
+          // complete frame and already emitted its one-shot notification in
+          // that interval (observed with cnfStart on restart); rechecking now
+          // consumes it immediately instead of sleeping until the carriage's
+          // next reqLine notification.
+          resolveFn();
         } else {
           console.error(
             "read_API6_async: registerDataAvailableResolver not available",
@@ -590,6 +623,10 @@ export class Communication implements ICommunication {
     }
     // Check for known tokens
     const tokenValue = msg[0];
+    console.log(
+      `[SerialProtocol] RX ${protocolTokenName(tokenValue)} frameBytes=${msg.length} ` +
+        `param=${msg.length > 1 ? msg[1] : "none"} raw=${protocolHex(msg)}`,
+    );
     // Iterate over Token enum values
     const tokenKeys = Object.keys(Token) as Array<keyof typeof Token>;
     for (const key of tokenKeys) {

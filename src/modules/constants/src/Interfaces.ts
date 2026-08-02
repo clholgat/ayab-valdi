@@ -58,9 +58,11 @@ export interface IControl {
     machine: Machine;
     start_needle: number;
     end_needle: number;
+    firstLinePreloaded?: boolean;
+    firstLineRowOffset?: number;
 
     func_selector(): boolean;
     check_serial_API6(): [Token, number];
-    cnf_line_API6(param: number): boolean;
+    cnf_line_API6(param: number, patternLineNumber?: number): boolean;
     cnf_final_line_API6(param: number): void;
 }

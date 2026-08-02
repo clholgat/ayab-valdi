@@ -120,11 +120,12 @@ describe("KnitSession", () => {
   it("can restart after cancel during simulation knit", async () => {
     const bits = prepareImageBitsForKnit([
       [new Uint8Array([0, 0, 0, 255])],
+      [new Uint8Array([0, 0, 0, 255])],
     ]);
     const startParams = {
       imageBits: bits,
       imageWidth: 1,
-      imageHeight: 1,
+      imageHeight: 2,
       settings,
       preferences: new Preferences(),
       serialPort: "Simulation",
@@ -155,8 +156,12 @@ describe("KnitSession", () => {
     expect(firstSession.control.state).toBe(StateMachineState.RUN_KNIT);
 
     firstSession.cancel();
+    // Keep the connection alive long enough for firmware to consume quit;
+    // immediately closing here races a rapid second Knit against the old FSM.
+    expect(firstSession.control.com.isOpen()).toBe(true);
     await firstRun;
     expect(firstSession.control.state).toBe(StateMachineState.FINISHED);
+    expect(firstSession.control.com.isOpen()).toBe(false);
 
     const secondStart = KnitSession.tryStart(startParams);
     expect(secondStart.ok).toBe(true);

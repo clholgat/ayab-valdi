@@ -34,8 +34,6 @@ export interface KnitProgressRowViewModel {
 }
 
 interface State {
-  cells: KnitProgressCellRenderData[];
-  cellTapHandlers: Array<() => void>;
   /** Measured width of the strip container; 0 until the first layout. */
   stripWidth: number;
 }
@@ -152,7 +150,7 @@ class KnitProgressRowInner extends StatefulComponent<
   KnitProgressRowViewModel,
   State
 > {
-  state: State = { cells: [], cellTapHandlers: [], stripWidth: 0 };
+  state: State = { stripWidth: 0 };
 
   private handleStripLayout = (frame: ElementFrame): void => {
     const width = Math.floor(frame.width);
@@ -170,29 +168,16 @@ class KnitProgressRowInner extends StatefulComponent<
     return Math.max(MIN_CELL_W, Math.min(CELL_W, fitted));
   }
 
-  onCreate(): void {
-    this.rebuildCells();
-  }
-
-  onViewModelUpdate(_previous?: KnitProgressRowViewModel): void {
-    this.rebuildCells();
-  }
-
-  private rebuildCells(): void {
-    const cells = computeKnitProgressCells(this.viewModel);
-    const cellTapHandlers = this.viewModel.onStitchSelect
-      ? cells.map((_, column) => () => this.handleCellTap(column))
-      : [];
-    this.setState({ cells, cellTapHandlers });
-  }
-
   private handleCellTap = (column: number): void => {
     this.viewModel.onStitchSelect?.(column);
   };
 
   onRender(): void {
     const vm = this.viewModel;
-    const cells = this.state.cells;
+    // Cells are a pure projection of the current status. Keeping them in
+    // component state makes Android render one update behind: the first row
+    // paints the initial empty array and only appears when row two arrives.
+    const cells = computeKnitProgressCells(vm);
     if (cells.length === 0) {
       <layout style={styles.tableRow}>
         <layout style={styles.rowTitleCol}>
@@ -237,7 +222,7 @@ class KnitProgressRowInner extends StatefulComponent<
                     backgroundColor={cell.backgroundColor}
                     borderColor={selected ? "#2563EB" : sideBorder}
                     borderWidth={selected ? 1.5 : cellW < 6 ? 0.25 : 0.5}
-                    onTap={this.state.cellTapHandlers[c]}
+                    onTap={vm.onStitchSelect ? () => this.handleCellTap(c) : undefined}
                   />;
                 }
               })()}

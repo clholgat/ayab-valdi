@@ -49,6 +49,7 @@ export interface AppSidebarViewModel {
   knitDisabled: boolean;
   knitDisabledReason: string | null;
   isKnitting: boolean;
+  isKnitStarting?: boolean;
   userMessageText?: string;
   userMessageLevel?: FeedbackLevel;
   activeTourTargetId?: string;
@@ -219,6 +220,7 @@ export class AppSidebar extends StatefulComponent<
     <InlineTourBubble targetId="checklist-target-knit" bubble={vm.tourBubble} />;
     <AppKnitFooter
       isKnitting={vm.isKnitting}
+      isKnitStarting={vm.isKnitStarting}
       knitDisabled={vm.knitDisabled}
       knitDisabledReason={vm.knitDisabledReason}
       userMessageText={

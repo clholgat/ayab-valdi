@@ -9,6 +9,7 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
@@ -30,6 +31,10 @@ import kotlin.concurrent.withLock
 private const val USB_PERMISSION_ACTION = "com.snap.modules.serial.USB_PERMISSION"
 private const val LOG_TAG = "AyabSerial"
 
+private fun ByteArray.hex(limit: Int = 48): String =
+    take(limit).joinToString(" ") { byte -> "%02x".format(byte.toInt() and 0xFF) } +
+        if (size > limit) " …" else ""
+
 @RegisterValdiModule
 class SerialModuleFactoryImpl: SerialModuleFactory() {
 
@@ -50,6 +55,7 @@ class SerialModuleImpl: SerialModule {
     private var usbDevice: UsbDevice? = null
     private var usbManager: UsbManager? = null
     private var context: Context? = null
+    private var wakeLock: PowerManager.WakeLock? = null
     
     // Thread for reading from USB serial
     private var readThread: Thread? = null
@@ -63,7 +69,7 @@ class SerialModuleImpl: SerialModule {
 
     override fun close_serial() {
         synchronized(this) {
-            if (!isOpen.get()) {
+            if (!isOpen.get() && usbPort == null && usbConnection == null && wakeLock == null) {
                 return
             }
             
@@ -80,21 +86,29 @@ class SerialModuleImpl: SerialModule {
                 usbPort?.close()
                 usbConnection?.close()
                 
+            } catch (e: Exception) {
+                Log.w(LOG_TAG, "Error while closing USB serial", e)
+            } finally {
+                SerialAppContext.setKeepScreenOn(false)
                 usbPort = null
                 usbConnection = null
                 usbDevice = null
-                
+                wakeLock?.let { lock ->
+                    if (lock.isHeld) {
+                        lock.release()
+                        Log.i(LOG_TAG, "Released serial-operation wake lock")
+                    }
+                }
+                wakeLock = null
                 readBuffer.clear()
                 isOpen.set(false)
-            } catch (e: Exception) {
-                // Log error if logging is available
             }
         }
     }
 
     override fun open_serial(uri: String) {
         synchronized(this) {
-            if (isOpen.get()) {
+            if (isOpen.get() || usbPort != null || usbConnection != null || wakeLock != null) {
                 close_serial()
             }
             
@@ -161,10 +175,23 @@ class SerialModuleImpl: SerialModule {
         usbPort!!.setParameters(BAUD_RATE, DATA_BITS, STOP_BITS, PARITY)
         Log.i(LOG_TAG, "USB serial opened and configured")
         
-        // Start read thread
-        startReadThread()
-        
+        // Mark the port open before starting the reader. The reader's loop
+        // condition checks isOpen; starting it first made startup depend on
+        // thread scheduling and could drop the firmware's immediate cnfStart /
+        // reqLine(0) burst.
         isOpen.set(true)
+        startReadThread()
+
+        val powerManager = context!!.getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "ayab:serial-operation",
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+        SerialAppContext.setKeepScreenOn(true)
+        Log.i(LOG_TAG, "Acquired serial-operation wake lock")
     }
     
     private fun findUsbDevice(uri: String, usbManager: UsbManager): UsbDevice? {
@@ -214,7 +241,7 @@ class SerialModuleImpl: SerialModule {
             }
             
             try {
-                Log.d(LOG_TAG, "TX ${data.size} bytes")
+                Log.d(LOG_TAG, "TX ${data.size} bytes raw=${data.hex()}")
                 usbPort?.write(data, 0)
             } catch (e: IOException) {
                 Log.e(LOG_TAG, "Serial write failed (${data.size} bytes)", e)
@@ -434,12 +461,17 @@ class SerialModuleImpl: SerialModule {
         
         shouldStopReading.set(false)
         readThread = Thread {
+            Log.i(LOG_TAG, "Serial read thread started open=${isOpen.get()}")
             val buffer = ByteArray(256)
             while (!shouldStopReading.get() && isOpen.get() && !Thread.currentThread().isInterrupted) {
                 try {
                     val bytesRead = usbPort?.read(buffer, 100) ?: 0
                     if (bytesRead > 0) {
-                        Log.d(LOG_TAG, "RX $bytesRead bytes")
+                        Log.d(
+                            LOG_TAG,
+                            "RX $bytesRead bytes raw=${buffer.copyOf(bytesRead).hex()} " +
+                                "resolvers=${dataAvailableResolvers.size}",
+                        )
                         bufferLock.withLock {
                             for (i in 0 until bytesRead) {
                                 readBuffer.offer(buffer[i])
@@ -463,6 +495,11 @@ class SerialModuleImpl: SerialModule {
                     break
                 }
             }
+            Log.i(
+                LOG_TAG,
+                "Serial read thread exited stop=${shouldStopReading.get()} " +
+                    "open=${isOpen.get()} interrupted=${Thread.currentThread().isInterrupted}",
+            )
         }.apply {
             isDaemon = true
             start()

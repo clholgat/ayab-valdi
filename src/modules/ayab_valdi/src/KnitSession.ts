@@ -42,6 +42,7 @@ export interface KnitSessionCallbacks {
   onStatusVersion: (version: number) => void;
   isDestroyed: () => boolean;
   onFeedback?: (message: FeedbackMessage) => void;
+  onReady?: () => void;
   quietMode?: boolean;
   audio?: AudioFeedbackSink;
   /** Awaited after a machine-job pattern row reaches a safe pass boundary. */
@@ -75,6 +76,7 @@ export interface MachineJobHardwareStartParams extends MachineJobSimulationStart
 export class KnitSession {
   readonly control: Control;
   private cancelled = false;
+  private cancelCleanup?: Promise<void>;
   statusVersion = 0;
 
   private constructor(
@@ -287,8 +289,34 @@ export class KnitSession {
       return;
     }
     this.cancelled = true;
-    this.control.stop();
     this.control.state = StateMachineState.FINISHED;
+    this.cancelCleanup = this.finishCancelledConnection();
+  }
+
+  /**
+   * Let the firmware consume quit before releasing USB. Its FSM applies the
+   * requested state change on the following dispatch; reopening immediately
+   * can otherwise deliver the next reqInit while the old knit is still active.
+   * reqInfo both flushes the write path and wakes any pending serial read in
+   * run(), while the short grace period covers that next firmware dispatch.
+   */
+  private async finishCancelledConnection(): Promise<void> {
+    try {
+      if (this.control.com?.isOpen()) {
+        this.control.com.reqQuit();
+        this.control.com.reqInfo();
+        const setTimeoutFn =
+          (globalThis as any).__originalTimingFunctions__?.setTimeout ||
+          setTimeout;
+        await new Promise<void>((resolve) => {
+          setTimeoutFn.call(globalThis, resolve, 150);
+        });
+      }
+    } catch (_error) {
+      // Cancellation cleanup is best-effort; always release the port below.
+    } finally {
+      this.control.com?.closeSerial();
+    }
   }
 
   async run(
@@ -348,6 +376,9 @@ export class KnitSession {
         }
 
         if (output !== this.control.notification) {
+          if (output === Output.PLEASE_KNIT) {
+            callbacks.onReady?.();
+          }
           KnitSession.emitFeedback(output, callbacks);
           this.control.notification = output;
         }
@@ -389,7 +420,9 @@ export class KnitSession {
       }
     }
 
-    if (!this.cancelled) {
+    if (this.cancelled) {
+      await this.cancelCleanup;
+    } else {
       this.control.stop();
     }
     return this.cancelled ? "cancelled" : "finished";

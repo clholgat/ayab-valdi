@@ -13,6 +13,7 @@ import { FeedbackLevel } from "./Feedback";
 
 export interface AppKnitFooterViewModel {
   isKnitting: boolean;
+  isKnitStarting?: boolean;
   knitDisabled: boolean;
   knitDisabledReason: string | null;
   userMessageText?: string;
@@ -48,8 +49,9 @@ export class AppKnitFooter extends Component<AppKnitFooterViewModel> {
         {vm.isKnitting ? (
           <CoreButton
             accessibilityId="cancel-button"
-            text="Cancel"
+            text={vm.isKnitStarting ? "Preparing…" : "Cancel"}
             onTap={vm.onCancel}
+            loading={vm.isKnitStarting}
             coloring={CoreButtonColoring.SECONDARY}
             sizing={CoreButtonSizing.SMALL}
             font={BUTTON_FONT_SMALL}

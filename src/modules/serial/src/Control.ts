@@ -82,6 +82,8 @@ export class Control implements IControl {
   end_needle: number = 0;
   end_pixel: number = 0;
   former_request: number = 0;
+  firstLinePreloaded: boolean = false;
+  firstLineRowOffset: number = 0;
   inf_repeat: boolean = false;
   initial_carriage: Carriage = Carriage.Unknown;
   initial_direction: Direction = Direction.Unknown;
@@ -119,6 +121,8 @@ export class Control implements IControl {
     this.machine = options.machine;
     if (operation === Operation.KNIT) {
       this.former_request = 0;
+      this.firstLinePreloaded = false;
+      this.firstLineRowOffset = 0;
       this.line_block = 0;
       this.pattern_repeats = 0;
       this.pattern = pattern;
@@ -357,7 +361,7 @@ export class Control implements IControl {
     console.log("");
   }
 
-  cnf_line_API6(line_number: number): boolean {
+  cnf_line_API6(line_number: number, patternLineNumber?: number): boolean {
     if (!(line_number < BLOCK_LENGTH)) {
       // TODO: Log error
       return true; // stop knitting
@@ -383,6 +387,9 @@ export class Control implements IControl {
 
     // adjust line_number with current block
     line_number += BLOCK_LENGTH * this.line_block;
+    if (patternLineNumber !== undefined) {
+      line_number = patternLineNumber + BLOCK_LENGTH * this.line_block;
+    }
 
     // Get data for next line of knitting via mode_func
     const [color, row_index, blank_line, last_line] = this.mode_func(

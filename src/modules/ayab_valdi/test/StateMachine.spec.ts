@@ -11,6 +11,7 @@ import { StateMachine } from "state_machine/src/StateMachine";
 import { Output } from "state_machine/src/Output";
 import { Control } from "serial/src/Control";
 import { Preferences } from "app_settings/src/Preferences";
+import { Token } from "constants/src/SerialConstants";
 
 function makePattern(width: number, height: number): Pattern {
   const black = new Uint8Array([0, 0, 0, 255]);
@@ -83,8 +84,24 @@ describe("StateMachine", () => {
     StateMachine._API6_connect(control, Operation.KNIT);
     StateMachine._API6_version_check(control, Operation.KNIT);
     const output = StateMachine._API6_init(control, Operation.KNIT);
-    expect(output).toBe(Output.NONE);
+    expect(output).toBe(Output.WAIT_FOR_INIT);
     expect(control.state).toBe(StateMachineState.REQUEST_START);
+  });
+
+  it("_API6_init quits and retries when firmware reports a stale operation", () => {
+    const control = makeSimulationControl();
+    control.state = StateMachineState.INIT;
+    (control as any).check_serial_API6 = () => [Token.cnfInit, 0xef];
+    let quitRequests = 0;
+    control.com.reqQuit = () => {
+      quitRequests += 1;
+    };
+
+    const output = StateMachine._API6_init(control, Operation.KNIT);
+
+    expect(output).toBe(Output.INITIALIZING_FIRMWARE);
+    expect(quitRequests).toBe(1);
+    expect(control.state).toBe(StateMachineState.INIT);
   });
 
   it("_API6_request_start sends reqStart on indState", () => {
@@ -99,6 +116,10 @@ describe("StateMachine", () => {
 
   it("_API6_confirm_start returns PLEASE_KNIT when device ready", () => {
     const control = makeSimulationControl();
+    const preloadedLines: number[] = [];
+    control.com.cnfLine = (lineNumber: number) => {
+      preloadedLines.push(lineNumber);
+    };
     StateMachine._API6_connect(control, Operation.KNIT);
     StateMachine._API6_version_check(control, Operation.KNIT);
     StateMachine._API6_init(control, Operation.KNIT);
@@ -106,6 +127,27 @@ describe("StateMachine", () => {
     const output = StateMachine._API6_confirm_start(control, Operation.KNIT);
     expect(output).toBe(Output.PLEASE_KNIT);
     expect(control.state).toBe(StateMachineState.RUN_KNIT);
+    expect(preloadedLines).toEqual([0]);
+  });
+
+  it("advances the pattern after a firmware reqLine(0) following preload", () => {
+    const control = makeSimulationControl();
+    const patternLines: number[] = [];
+    StateMachine._API6_connect(control, Operation.KNIT);
+    StateMachine._API6_version_check(control, Operation.KNIT);
+    StateMachine._API6_init(control, Operation.KNIT);
+    StateMachine._API6_request_start(control, Operation.KNIT);
+    const originalModeFunc = control.mode_func;
+    control.mode_func = (modeControl, lineNumber) => {
+      patternLines.push(lineNumber);
+      return originalModeFunc(modeControl, lineNumber);
+    };
+    StateMachine._API6_confirm_start(control, Operation.KNIT);
+    control.firstLinePreloaded = true;
+
+    (StateMachine as any).answerLineRequest(control, 0);
+
+    expect(patternLines).toEqual([0, 1]);
   });
 
   it("_API6_request_test moves to CONFIRM_TEST", () => {

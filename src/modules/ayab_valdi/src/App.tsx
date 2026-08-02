@@ -119,6 +119,7 @@ interface State {
   currentImageSettings?: ImageSettings;
   selectedSerialPort?: string;
   isKnitting: boolean;
+  isKnitStarting: boolean;
   knitSession?: KnitSession;
   imageBits?: Uint8Array[][];
   imageWidth?: number;
@@ -214,6 +215,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   state: State = {
     preferences: new Preferences(),
     isKnitting: false,
+    isKnitStarting: false,
     preferencesRevision: 0,
     machineRevision: 0,
     imageBitsRevision: 0,
@@ -236,6 +238,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     // the first render, then observe subsequent light/dark-mode changes.
     forceColorPalette(getCurrentPalette());
     initializeSemanticColors();
+    Device.setBackButtonObserver(this.handleAndroidBack);
 
     if (Device.isWeb()) {
       const e2eWs = (globalThis as { __E2E_WEBSOCKET_URI__?: string })
@@ -291,6 +294,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   }
 
   onDestroy(): void {
+    Device.setBackButtonObserver(undefined);
     this.unsubscribePreferences?.();
     this.state.knitSession?.cancel();
     this.state.hwTestSession?.cancel();
@@ -546,6 +550,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     this.knitStatusNotifier.set(0);
     this.setState({
       isKnitting: false,
+      isKnitStarting: false,
       knitSession: undefined,
       userMessage: retainedMachineJobProgress
         ? {
@@ -639,6 +644,14 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     this.setState({ sidebarDrawerOpen: false });
   };
 
+  private handleAndroidBack = (): boolean => {
+    if (this.state.sidebarDrawerOpen) {
+      this.handleCloseSidebarDrawer();
+      return true;
+    }
+    return false;
+  };
+
   private renderAppSidebar(
     previewPalette: number[] | undefined,
     knitDisabled: boolean,
@@ -669,6 +682,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
       knitDisabled={knitDisabled}
       knitDisabledReason={knitDisabledReason}
       isKnitting={this.state.isKnitting}
+      isKnitStarting={this.state.isKnitStarting}
       userMessageText={this.state.userMessage?.text}
       userMessageLevel={this.state.userMessage?.level}
       activeTourTargetId={tourStep?.targetId}
@@ -759,6 +773,7 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     <layout style={styles.compactKnitWrap}>
       <AppKnitFooter
         isKnitting={this.state.isKnitting}
+        isKnitStarting={this.state.isKnitStarting}
         knitDisabled={knitDisabled}
         knitDisabledReason={knitDisabledReason}
         userMessageText={showActionBanner ? undefined : this.state.userMessage?.text}
@@ -908,56 +923,72 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   }
 
   private startKnit = async (): Promise<void> => {
-    await runAppKnit(
-      {
-        settings: this.state.currentImageSettings,
-        isKnitting: this.state.isKnitting,
-        imageBits: this.state.imageBits,
-        imageWidth: this.state.imageWidth,
-        imageHeight: this.state.imageHeight,
-        rowMemos: this.state.rowMemos,
-        preferences: this.state.preferences,
-        serialPort: this.state.selectedSerialPort,
-        audio: this.audioSink,
-      },
-      {
-        onValidationError: (message) => {
-          this.setState({ userMessage: message });
+    this.setState({ isKnitStarting: true });
+    try {
+      await runAppKnit(
+        {
+          settings: this.state.currentImageSettings,
+          isKnitting: this.state.isKnitting,
+          imageBits: this.state.imageBits,
+          imageWidth: this.state.imageWidth,
+          imageHeight: this.state.imageHeight,
+          rowMemos: this.state.rowMemos,
+          preferences: this.state.preferences,
+          serialPort: this.state.selectedSerialPort,
+          audio: this.audioSink,
         },
-        onKnitStarted: (knitSession) => {
-          this.machineJobSimulationActive = false;
-          this.setState({ isKnitting: true, knitSession });
+        {
+          onValidationError: (message) => {
+            this.setState({ userMessage: message, isKnitStarting: false });
+          },
+          onKnitStarted: (knitSession) => {
+            this.machineJobSimulationActive = false;
+            this.setState({ isKnitting: true, knitSession });
+          },
+          onKnitReady: () => {
+            if (!this.isDestroyed()) {
+              this.setState({ isKnitStarting: false });
+            }
+          },
+          onStatusVersion: (version) => {
+            this.knitStatusNotifier.set(version);
+          },
+          onFeedback: (message) => {
+            if (!this.isDestroyed()) {
+              this.setState({ userMessage: message });
+            }
+          },
+          onKnitFinished: () => {
+            this.knitStatusNotifier.set(0);
+            this.setState({
+              isKnitting: false,
+              isKnitStarting: false,
+              knitSession: undefined,
+              userMessage: KNIT_FINISHED_MESSAGE,
+            });
+          },
+          onKnitRuntimeError: () => {
+            this.knitStatusNotifier.set(0);
+            this.setState({
+              isKnitting: false,
+              isKnitStarting: false,
+              knitSession: undefined,
+              userMessage: {
+                text: "An error occurred while knitting.",
+                level: "error",
+              },
+            });
+          },
+          isDestroyed: () => this.isDestroyed(),
         },
-        onStatusVersion: (version) => {
-          this.knitStatusNotifier.set(version);
-        },
-        onFeedback: (message) => {
-          if (!this.isDestroyed()) {
-            this.setState({ userMessage: message });
-          }
-        },
-        onKnitFinished: () => {
-          this.knitStatusNotifier.set(0);
-          this.setState({
-            isKnitting: false,
-            knitSession: undefined,
-            userMessage: KNIT_FINISHED_MESSAGE,
-          });
-        },
-        onKnitRuntimeError: () => {
-          this.knitStatusNotifier.set(0);
-          this.setState({
-            isKnitting: false,
-            knitSession: undefined,
-            userMessage: {
-              text: "An error occurred while knitting.",
-              level: "error",
-            },
-          });
-        },
-        isDestroyed: () => this.isDestroyed(),
-      },
-    );
+      );
+    } finally {
+      // Covers silent early returns (already active, missing settings, or a
+      // caller destroyed while waiting) as well as unexpected exceptions.
+      if (!this.isDestroyed()) {
+        this.setState({ isKnitStarting: false });
+      }
+    }
   };
 
   private startMachineJobSimulation = async (

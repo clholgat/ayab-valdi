@@ -11,6 +11,57 @@ import { IControl } from "constants/src/Interfaces";
 
 export class StateMachine {
   private static lastRetry: number = 0.0;
+  private static readonly WRONG_MACHINE_STATE = 0xef;
+  private static readonly FIRST_LINE_GRACE_MS = 250;
+
+  /**
+   * API 6 firmware up through 1.0 does not reset Knitter::m_firstRun when a
+   * second job starts. In that state it waits until the first carriage pass
+   * before requesting line 0. Its cnfLine handler still loads the line buffer
+   * before checking whether the line was requested, so preload row 0 as soon
+   * as start succeeds. The normal reqLine(0) response remains necessary and
+   * harmless when the firmware sends it.
+   */
+  private static preloadFirstLine(control: IControl): void {
+    console.log(
+      "[SerialProtocol] cnfStart succeeded; preloading cnfLine(0) for the first carriage pass",
+    );
+    control.cnf_line_API6(0);
+    control.firstLinePreloaded = true;
+  }
+
+  private static answerLineRequest(
+    control: IControl,
+    requestedLine: number,
+  ): boolean {
+    if (requestedLine === 0 && control.firstLinePreloaded) {
+      // The app only preloads after the normal startup-request grace period has
+      // elapsed, while the UI still says Preparing. A later request therefore
+      // comes from the buggy first turnaround: row 0 has already knitted.
+      control.firstLineRowOffset = 1;
+      console.log(
+        "[SerialProtocol] delayed reqLine(0) after preload; loading pattern row 1",
+      );
+    }
+    const patternLine = requestedLine + (control.firstLineRowOffset ?? 0);
+    return control.cnf_line_API6(requestedLine, patternLine);
+  }
+
+  private static finishSuccessfulStart(control: IControl): Output {
+    const [token, param] = control.check_serial_API6();
+    if (token === Token.reqLine) {
+      // Normal firmware requests row 0 immediately on entering knit. Handling
+      // it here avoids both an unsolicited preload and any row offset.
+      const patternFinished = StateMachine.answerLineRequest(control, param);
+      control.state = patternFinished
+        ? StateMachineState.FINISHING
+        : StateMachineState.RUN_KNIT;
+    } else {
+      StateMachine.preloadFirstLine(control);
+      control.state = StateMachineState.RUN_KNIT;
+    }
+    return Output.PLEASE_KNIT;
+  }
 
   static retry(method: () => void, timeout: number = 0.1): void {
     const currentTime = Date.now() / 1000.0;
@@ -42,6 +93,26 @@ export class StateMachine {
     param: number,
     returnPromise: boolean = false,
   ): Output | any {
+    console.log(
+      `[SerialProtocol] cnfInit param=${param} operation=${Operation[operation]} ` +
+        `stateBefore=${StateMachineState[control.state]}`,
+    );
+    if (param !== 0) {
+      if (param === StateMachine.WRONG_MACHINE_STATE) {
+        console.warn(
+          "[SerialProtocol] Firmware is still in a previous operation; sending quit before retrying init",
+        );
+        control.com.reqQuit();
+        control.state = StateMachineState.INIT;
+        return returnPromise
+          ? this.resolvedPromise(Output.INITIALIZING_FIRMWARE)
+          : Output.INITIALIZING_FIRMWARE;
+      }
+      control.state = StateMachineState.FINISHED;
+      return returnPromise
+        ? this.resolvedPromise(Output.ERROR_INITIALIZING_FIRMWARE)
+        : Output.ERROR_INITIALIZING_FIRMWARE;
+    }
     // Even if there's an error (param != 0), we still transition to REQUEST_START
     // because the firmware will send indState after cnfInit, and error codes like 4
     // typically mean "wait for carriage" which is what REQUEST_START handles
@@ -53,12 +124,21 @@ export class StateMachine {
     } else {
       // operation = Operation.KNIT:
       control.state = StateMachineState.REQUEST_START;
-      return returnPromise ? this.resolvedPromise(Output.NONE) : Output.NONE;
+      // Show carriage setup guidance immediately. The async REQUEST_START
+      // state may then wait several seconds for indState and cannot emit an
+      // intermediate message while that read is pending.
+      return returnPromise
+        ? this.resolvedPromise(Output.WAIT_FOR_INIT)
+        : Output.WAIT_FOR_INIT;
     }
   }
 
   // Helper to process indState and send reqStart if param is 0
   private static processIndState(control: IControl, param: number): Output {
+    console.log(
+      `[SerialProtocol] indState param=${param} carriage=${control.status.carriageType} ` +
+        `position=${control.status.carriagePosition} direction=${control.status.carriageDirection}`,
+    );
     if (param === 0) {
       // record initial position, direction, carriage
       control.initial_carriage = control.status.carriageType;
@@ -319,6 +399,14 @@ export class StateMachine {
     // This matches Python's behavior: check first, then send reqInit if needed
     const [queuedToken, queuedParam] = control.check_serial_API6();
     if (queuedToken === Token.cnfInit) {
+      if (queuedParam !== 0) {
+        return StateMachine.processCnfInit(
+          control,
+          operation,
+          queuedParam,
+          true,
+        );
+      }
       console.log(
         "StateMachine._API6_init_async: Found cnfInit in queue, processing",
       );
@@ -332,9 +420,8 @@ export class StateMachine {
           "StateMachine._API6_init_async: Found indState in buffer immediately after cnfInit!",
         );
         StateMachine.processCnfInit(control, operation, queuedParam);
-        return StateMachine.resolvedPromise(
-          StateMachine.processIndState(control, nextParam),
-        );
+        StateMachine.processIndState(control, nextParam);
+        return StateMachine.resolvedPromise(Output.WAIT_FOR_INIT);
       }
       return StateMachine.processCnfInit(control, operation, queuedParam, true);
     }
@@ -355,12 +442,19 @@ export class StateMachine {
         console.log(
           "StateMachine._API6_init_async: Received cnfInit after reqInit",
         );
+        if (param !== 0) {
+          return StateMachine.processCnfInit(
+            control,
+            operation,
+            param,
+            true,
+          );
+        }
         const [nextToken, nextParam] = control.check_serial_API6();
         if (nextToken === Token.indState) {
           StateMachine.processCnfInit(control, operation, param);
-          return StateMachine.resolvedPromise(
-            StateMachine.processIndState(control, nextParam),
-          );
+          StateMachine.processIndState(control, nextParam);
+          return StateMachine.resolvedPromise(Output.WAIT_FOR_INIT);
         }
         return StateMachine.processCnfInit(control, operation, param, true);
       }
@@ -375,19 +469,7 @@ export class StateMachine {
   static _API6_init(control: IControl, operation: Operation): Output {
     const [token, param] = control.check_serial_API6();
     if (token === Token.cnfInit) {
-      // Even if there's an error (param != 0), we still transition to REQUEST_START
-      // because the firmware will send indState after cnfInit, and error codes like 4
-      // typically mean "wait for carriage" which is what REQUEST_START handles
-      if (operation === Operation.TEST) {
-        control.state = StateMachineState.REQUEST_TEST;
-        // control.logger.debug("State REQUEST_TEST");
-        return Output.NONE;
-      } else {
-        // operation = Operation.KNIT:
-        control.state = StateMachineState.REQUEST_START;
-        // control.logger.debug("State REQUEST_START");
-        return Output.NONE;
-      }
+      return StateMachine.processCnfInit(control, operation, param);
     }
     // Match init_async: request firmware init when cnfInit has not arrived yet.
     control.com.reqInit(control.machine);
@@ -411,6 +493,9 @@ export class StateMachine {
 
     // First check synchronously for immediate data (non-blocking)
     const [immediateToken, immediateParam] = control.check_serial_API6();
+    console.log(
+      `[SerialProtocol] REQUEST_START immediate token=${Token[immediateToken]} param=${immediateParam}`,
+    );
     if (immediateToken === Token.indState) {
       console.log(
         "StateMachine._API6_request_start_async: Found indState immediately",
@@ -453,6 +538,9 @@ export class StateMachine {
             boundClearTimeout(timeoutId);
             const token = result[0];
             const param = result[1];
+            console.log(
+              `[SerialProtocol] REQUEST_START async token=${Token[token]} param=${param}`,
+            );
 
             if (token === Token.indState) {
               console.log(
@@ -503,10 +591,23 @@ export class StateMachine {
     ) {
       const token = result[0];
       const param = result[1];
+      console.log(
+        `[SerialProtocol] CONFIRM_START token=${Token[token]} param=${param}`,
+      );
       if (token === Token.cnfStart) {
         if (param === 0) {
-          control.state = StateMachineState.RUN_KNIT;
-          return Output.PLEASE_KNIT;
+          const originalTiming = (globalThis as any).__originalTimingFunctions__;
+          const setTimeoutFn = originalTiming?.setTimeout || setTimeout;
+          const boundSetTimeout = setTimeoutFn.bind(globalThis);
+          return new (StateMachine.getPromiseConstructor())(
+            function (resolve: (output: Output) => void) {
+              // Keep the UI in Preparing while normal firmware has a chance
+              // to place its immediate reqLine(0) in the receive buffer.
+              boundSetTimeout(function () {
+                resolve(StateMachine.finishSuccessfulStart(control));
+              }, StateMachine.FIRST_LINE_GRACE_MS);
+            },
+          );
         } else {
           // any value of param other than 0 is some kind of error code
           console.error(
@@ -525,9 +626,7 @@ export class StateMachine {
     const [token, param] = control.check_serial_API6();
     if (token === Token.cnfStart) {
       if (param === 0) {
-        control.state = StateMachineState.RUN_KNIT;
-        // control.logger.debug("State RUN_KNIT");
-        return Output.PLEASE_KNIT;
+        return StateMachine.finishSuccessfulStart(control);
       } else {
         // any value of param other than 0 is some kind of error code
         // control.logger.error(
@@ -544,7 +643,7 @@ export class StateMachine {
   static _API6_run_knit(control: IControl, operation: Operation): Output {
     const [token, param] = control.check_serial_API6();
     if (token === Token.reqLine) {
-      const pattern_finished = control.cnf_line_API6(param);
+      const pattern_finished = StateMachine.answerLineRequest(control, param);
       if (pattern_finished) {
         control.state = StateMachineState.FINISHING;
         return Output.NEXT_LINE;
@@ -574,7 +673,7 @@ export class StateMachine {
         console.log(
           "[JS] StateMachine RUN_KNIT: received reqLine(" + param + ")",
         );
-        const pattern_finished = control.cnf_line_API6(param);
+        const pattern_finished = StateMachine.answerLineRequest(control, param);
         if (pattern_finished) {
           control.state = StateMachineState.FINISHING;
           return Output.NEXT_LINE;

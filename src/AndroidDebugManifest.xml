@@ -16,7 +16,6 @@
             android:initOrder="100" />
         <activity
             android:name="com.snap.valdi.ayab_valdi_app.StartActivity"
-            android:screenOrientation="portrait"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
