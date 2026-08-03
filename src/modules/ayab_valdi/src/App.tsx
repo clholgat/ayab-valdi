@@ -27,7 +27,6 @@ import {
 import { APP_BACKGROUND } from "constants/src/UiTheme";
 import { BUTTON_FONT_SMALL } from "constants/src/Typography";
 import { PreviewPanel } from "./PreviewPanel";
-import { ayabMachineCapabilities } from "./AyabMachineCapabilities";
 import { PatternLoadInfo } from "preview/src/Preview";
 import { ValueNotifier } from "./ValueNotifier";
 import {
@@ -48,10 +47,10 @@ import {
   CoreButtonSizing,
 } from "widgets/src/components/button/CoreButton";
 import {
-  forceColorPalette,
-  getCurrentPalette,
   initializeSemanticColors,
+  setTheme,
 } from "widgets/src/InitSemanticColors";
+import { ThemeLight } from "widgets/src/ColorSpec";
 import {
   FIRST_RUN_TOUR_STEP_COUNT,
   FirstRunTourStep,
@@ -231,12 +230,10 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
   };
 
   onCreate(): void {
-    // InitSemanticColors is imported by widget modules while the bundle is
-    // loading, which can be earlier than Android's native runtime is ready to
-    // accept its palette. Re-apply it from the root component lifecycle so
-    // semantic colors (notably CoreButton backgrounds) are registered before
-    // the first render, then observe subsequent light/dark-mode changes.
-    forceColorPalette(getCurrentPalette());
+    // AYAB uses a fixed light application palette. Register that palette from
+    // the root lifecycle so native runtimes receive it before the first render,
+    // without allowing the system dark-mode palette to blacken widget buttons.
+    setTheme(ThemeLight, false);
     initializeSemanticColors();
     Device.setBackButtonObserver(this.handleAndroidBack);
 
@@ -855,18 +852,6 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
                 tourStep?.targetId === "checklist-target-pattern"
               }
               tourBubble={tourBubble}
-              machineJobCapabilities={ayabMachineCapabilities({
-                machine,
-                mode:
-                  this.state.currentImageSettings?.mode ??
-                  this.state.preferences.defaultKnittingMode,
-                numColors: this.state.currentImageSettings?.numColors ?? 2,
-              })}
-              onSimulateMachineJob={this.handleSimulateMachineJob}
-              onKnitMachineJob={this.state.selectedSerialPort ? this.handleKnitMachineJob : undefined}
-              initialMachineJobJson={this.viewModel.initialMachineJobJson}
-              initialMachineJobFileName={this.viewModel.initialMachineJobFileName}
-              initialMachineJobRevision={this.viewModel.initialMachineJobRevision}
             />
           </layout>
           {this.renderInlineSidebar(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble)}

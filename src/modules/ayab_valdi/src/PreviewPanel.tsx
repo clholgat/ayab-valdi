@@ -36,7 +36,7 @@ export interface PreviewPanelViewModel {
   /** Bumped when parent updates image bits (e.g. repeat from Image Settings). */
   imageBitsRevision?: number;
   syncedBits?: Uint8Array[][];
-  /** AYAB memo codes aligned with the transformed preview rows. */
+  /** AYAB memo codes in bottom-first knitting order. */
   rowMemos?: string[];
   knitSession?: KnitSession;
   isKnitting: boolean;

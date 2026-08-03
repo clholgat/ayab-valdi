@@ -47,10 +47,7 @@ import {
 } from "process_image/src/PatternFileLoader";
 import { dataUrlToBytes } from "process_image/src/PatternImportBinary";
 import { readPngComment } from "process_image/src/PngMetadata";
-import {
-  parseAyabMemos,
-  storedAyabMemosToImageRows,
-} from "process_image/src/PatternMemo";
+import { parseAyabMemos } from "process_image/src/PatternMemo";
 import {
   FilePicker,
   FilePickerOnSelectEvent,
@@ -248,14 +245,10 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
   private extractMemos(event: FilePickerOnSelectEvent): string[] {
     try {
       if (event.dataUrl) {
-        return storedAyabMemosToImageRows(
-          parseAyabMemos(readPngComment(dataUrlToBytes(event.dataUrl))),
-        );
+        return parseAyabMemos(readPngComment(dataUrlToBytes(event.dataUrl)));
       }
       if (event.path && typeof readFileBytes === "function") {
-        return storedAyabMemosToImageRows(
-          parseAyabMemos(readPngComment(readFileBytes(event.path))),
-        );
+        return parseAyabMemos(readPngComment(readFileBytes(event.path)));
       }
     } catch (error) {
       console.error("Failed to read pattern memo metadata:", error);
@@ -288,7 +281,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     if (parseModuleResource(source)) {
       const bytes = moduleResourceBytes(source);
       const memos = bytes
-        ? storedAyabMemosToImageRows(parseAyabMemos(readPngComment(bytes)))
+        ? parseAyabMemos(readPngComment(bytes))
         : [];
       const dataUrl = Device.isWeb() ? moduleResourceDataUrl(source) : undefined;
       if (dataUrl && typeof getBitsAsync !== "undefined" && getBitsAsync) {

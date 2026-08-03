@@ -13,15 +13,19 @@ export interface VisibleRowMemo {
   memo: string;
 }
 
-/** Non-empty AYAB memo codes, retaining their top-down image row index. */
+/**
+ * Non-empty AYAB memo codes mapped from bottom-first knitting order to the
+ * top-down preview grid.
+ */
 export function visibleRowMemos(
   memos: string[] | undefined,
   rowCount: number,
 ): VisibleRowMemo[] {
   if (!memos || rowCount <= 0) return [];
   const result: VisibleRowMemo[] = [];
-  for (let rowIndex = 0; rowIndex < Math.min(memos.length, rowCount); rowIndex++) {
-    const memo = memos[rowIndex]?.trim();
+  const visibleCount = Math.min(memos.length, rowCount);
+  for (let rowIndex = 0; rowIndex < visibleCount; rowIndex++) {
+    const memo = memos[visibleCount - rowIndex - 1]?.trim();
     if (memo && memo !== "0") result.push({ rowIndex, memo });
   }
   return result;

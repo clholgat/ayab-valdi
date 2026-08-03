@@ -375,10 +375,21 @@ export class KnitSession {
           break;
         }
 
+        // WAIT_FOR_INIT is the point where firmware initialization has
+        // completed and carriage detection is armed. Readiness is a state,
+        // not a notification edge: restarted sessions may retain the same
+        // notification, so always notify the UI while in either ready state.
+        if (
+          output === Output.WAIT_FOR_INIT ||
+          output === Output.PLEASE_KNIT
+        ) {
+          console.log(
+            `[KnitSession] carriage-ready state=${StateMachineState[this.control.state]} output=${Output[output]}`,
+          );
+          callbacks.onReady?.();
+        }
+
         if (output !== this.control.notification) {
-          if (output === Output.PLEASE_KNIT) {
-            callbacks.onReady?.();
-          }
           KnitSession.emitFeedback(output, callbacks);
           this.control.notification = output;
         }

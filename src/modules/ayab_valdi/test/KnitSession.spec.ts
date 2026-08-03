@@ -277,6 +277,40 @@ describe("KnitSession", () => {
     expect(feedbackMessages).toEqual([]);
   });
 
+  it("reports ready when carriage detection is armed", async () => {
+    const bits = prepareImageBitsForKnit([
+      [new Uint8Array([0, 0, 0, 255])],
+    ]);
+    const start = KnitSession.tryStart({
+      imageBits: bits,
+      imageWidth: 1,
+      imageHeight: 1,
+      settings,
+      preferences: new Preferences(),
+      serialPort: "Simulation",
+    });
+    expect(start.ok).toBeTrue();
+    if (!start.ok) return;
+
+    const session = start.session;
+    session.control.notification = Output.WAIT_FOR_INIT;
+    (session.control as any).operate_async = () =>
+      Promise.resolve(Output.WAIT_FOR_INIT);
+
+    let ready = false;
+    const run = session.run({
+      onStatusVersion: () => {},
+      isDestroyed: () => false,
+      onReady: () => {
+        ready = true;
+        session.cancel();
+      },
+    });
+
+    await run;
+    expect(ready).toBeTrue();
+  });
+
   it("awaits a pass checkpoint and stops when persistence fails", async () => {
     const bits = prepareImageBitsForKnit([
       [new Uint8Array([0, 0, 0, 255])],

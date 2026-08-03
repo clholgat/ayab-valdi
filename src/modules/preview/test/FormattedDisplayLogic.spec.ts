@@ -68,10 +68,10 @@ describe("FormattedDisplayLogic", () => {
   });
 
   describe("visibleRowMemos", () => {
-    it("keeps annotations aligned to their image rows and hides empty memos", () => {
+    it("maps bottom-first knitting memos onto top-down preview rows", () => {
       expect(visibleRowMemos(["0", "3", "", "7", "9"], 4)).toEqual([
-        { rowIndex: 1, memo: "3" },
-        { rowIndex: 3, memo: "7" },
+        { rowIndex: 0, memo: "7" },
+        { rowIndex: 2, memo: "3" },
       ]);
     });
   });
