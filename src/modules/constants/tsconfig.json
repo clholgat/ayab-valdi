@@ -20,6 +20,29 @@
             "valdi_core/*": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/*"
             ],
+            "valdi_rxjs/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_rxjs/*"
+            ],
+            "file_system/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/file_system/*"
+            ],
+            "valdi_standalone/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_standalone/*"
+            ],
+            "valdi_test/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_test/*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/external/valdi~/src/valdi_modules/src/valdi/valdi_test/.valdi_build/projectsync/generated_ts/valdi_test/*"
+            ],
+            "bridge_observables/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/bridge_observables/*"
+            ],
+            "foundation/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/foundation/*"
+            ],
+            "widgets/*": [
+                "../../bazel-src/external/valdi_widgets~/valdi_modules/widgets/*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/external/valdi_widgets~/valdi_modules/widgets/.valdi_build/projectsync/generated_ts/widgets/*"
+            ],
             "tslib": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/src/tslib"
             ]

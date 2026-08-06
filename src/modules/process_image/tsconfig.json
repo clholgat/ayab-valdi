@@ -20,6 +20,16 @@
             "valdi_core/*": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/*"
             ],
+            "file_system/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/file_system/*"
+            ],
+            "valdi_standalone/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_standalone/*"
+            ],
+            "valdi_test/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_test/*",
+                "../../bazel-out/darwin_arm64-fastbuild/bin/external/valdi~/src/valdi_modules/src/valdi/valdi_test/.valdi_build/projectsync/generated_ts/valdi_test/*"
+            ],
             "tslib": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/src/tslib"
             ]

@@ -21,9 +21,6 @@
             "valdi_core/*": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_core/*"
             ],
-            "valdi_rxjs/*": [
-                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_rxjs/*"
-            ],
             "file_system/*": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/file_system/*"
             ],
@@ -33,6 +30,9 @@
             "valdi_test/*": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_test/*",
                 "../../bazel-out/darwin_arm64-fastbuild/bin/external/valdi~/src/valdi_modules/src/valdi/valdi_test/.valdi_build/projectsync/generated_ts/valdi_test/*"
+            ],
+            "valdi_rxjs/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/valdi_rxjs/*"
             ],
             "bridge_observables/*": [
                 "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/bridge_observables/*"
@@ -50,8 +50,17 @@
             "navigation_internal/*": [
                 "../../bazel-src/external/valdi_widgets~/valdi_modules/navigation_internal/*"
             ],
+            "machine_job/*": [
+                "../machine_job/*"
+            ],
+            "persistence/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/persistence/*"
+            ],
             "constants/*": [
                 "../constants/*"
+            ],
+            "drawing/*": [
+                "../../bazel-src/external/valdi~/src/valdi_modules/src/valdi/drawing/*"
             ],
             "valdi_standalone_ui/*": [
                 "../../bazel-src/external/valdi_widgets~/valdi_modules/valdi_standalone_ui/*",
@@ -59,6 +68,12 @@
             ],
             "process_image/*": [
                 "../process_image/*"
+            ],
+            "knitout/*": [
+                "../knitout/*"
+            ],
+            "knit_session/*": [
+                "../knit_session/*"
             ],
             "state_machine/*": [
                 "../state_machine/*"

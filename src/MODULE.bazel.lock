@@ -1102,7 +1102,7 @@
           "@@valdi~~_repo_rules~resvg//Cargo.lock": "b70631996d9140118410a57090f2da7ac7f8bb6b96e033e7a30b2839c6dc3b2f",
           "@@rules_rust~~rust_host_tools~rust_host_tools_nightly//rust_host_tools_nightly": "ENOENT",
           "@@valdi~//third-party/resvg/cargo-bazel-lock.json": "954b60ffc5158ff5451bdcbad7a7970525c94c8fe8a1cb8b48b942a4a90f229a",
-          "@@//MODULE.bazel": "2c68192652367ef336ca43516856d1f6c556ca051b4a4ed6427fe71a540bff9a",
+          "@@//MODULE.bazel": "a456359d5380f486217b596e25eeadfb2cc9ff4fb2c13654e2ab17e9803bd2ae",
           "@@rules_rust~~rust_host_tools~rust_host_tools//rust_host_tools": "ENOENT"
         },
         "recordedDirentsInputs": {},
@@ -3056,7 +3056,7 @@
     },
     "@@valdi~//bzlmod:swift_toolchains_extension.bzl%swift_toolchains_extension": {
       "general": {
-        "bzlTransitiveDigest": "oHDTt7er3bWy22c5ChMaq6yJwremB9Lo5Bs66V2iuwg=",
+        "bzlTransitiveDigest": "6/8LAI63LLqY/CoBuF+nVoV/orI8vNklWydkmzpo/pA=",
         "usagesDigest": "0ApADsAzpmyAUxi1sgx1wp9huNirQ+w0PShQ96lpqys=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -3070,6 +3070,7 @@
               "sha256": "",
               "strip_prefix": "swift-5.10.1-RELEASE-ubuntu22.04",
               "arch": "x86_64",
+              "version": "5.10.1",
               "swift_relative_path": "usr/bin/swift"
             }
           }

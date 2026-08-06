@@ -2,7 +2,7 @@ module(name = "ayab_valdi", version = "0.1")
 
 # Pinned upstream commits (keep in sync with .github/valdi-deps.env).
 # Update with: ./scripts/pin-valdi-deps.sh <valdi-sha> <widgets-sha>
-VALDI_REF = "919f23c8ebdd3582b58821a9ff252b93ead5eb75"
+VALDI_REF = "05cf6677b243eed8d0df577877990c0a454274aa"
 WIDGETS_REF = "eaf2af1682c406abfa87ebf5c87d01dd44e14c9c"
 
 VALDI_URL = "https://github.com/Snapchat/Valdi/archive/{}.tar.gz".format(VALDI_REF)
