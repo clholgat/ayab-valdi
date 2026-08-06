@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI workflows for Bazel tests (macOS) and web E2E (Ubuntu)
 - Contributor documentation (README, CONTRIBUTING, setup scripts)
 - Pinned Valdi dependency SHAs for reproducible CI (`.github/valdi-deps.env`)
+- Experimental Knitout 2 import with source-line diagnostics, AYAB pass compilation, placement and carrier controls, simulation, prompts, and durable recovery
 
 ### Changed
 

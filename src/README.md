@@ -23,6 +23,9 @@ cd web && npm start
 | `image_settings` | Knit settings UI and pure logic |
 | `app_settings` | Preferences storage, settings screen, about screen |
 | `process_image` | Image loading, `.pat` / `.stp` / `.cut` import |
+| `knitout` | Knitout parser, analysis, pass scheduling, and AYAB compilation |
+| `machine_job` | Portable executable-job schema, validation, and preflight |
+| `knit_session` | Durable pass-boundary checkpoints and recovery |
 | `constants` | Shared types, tokens, UI theme |
 
 ## `ayab_valdi` app architecture
@@ -55,9 +58,9 @@ When adding features: put validation and transforms in `*Logic.ts`, session loop
 ## Tests
 
 ```bash
-../scripts/run-tests.sh                 # all 8 module targets
+../scripts/run-tests.sh                 # all module targets
 bazel test //modules/ayab_valdi:test    # single module
-cd web && npm run e2e                   # 9 browser specs
+cd web && npm run e2e                   # browser specs
 ```
 
 See `TDD_GAP_PLAN.md` for the full spec map and remaining gaps.

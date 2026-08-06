@@ -65,6 +65,11 @@ export interface MachinePass {
   direction: PassDirection;
   activeNeedles: ActiveNeedles;
   selection: NeedleSelection;
+  /**
+   * Ordered yarn choices for the selection bitmap. For two-yarn passes, a
+   * selected bit (1) chooses yarnIds[0] and an unselected bit (0) chooses
+   * yarnIds[1] inside activeNeedles. One-yarn passes select every active needle.
+   */
   yarnIds: string[];
   technique: string;
   carriage?: string;

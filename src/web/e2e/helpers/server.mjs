@@ -35,7 +35,13 @@ export async function startDevServer(port = DEFAULT_PORT) {
 
   const child = spawn("npm", ["run", "serve"], {
     cwd: new URL("../..", import.meta.url).pathname,
-    env: { ...process.env, PORT: String(port) },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      // run.mjs builds and refreshes the stable bundle immediately before
+      // starting this server. Prevent npm's `preserve` hook doing it again.
+      AYAB_WEB_ALREADY_ENSURED: "1",
+    },
     stdio: ["ignore", "pipe", "pipe"],
     // npm doesn't forward signals to the webpack-dev-server process it
     // spawns as its own child, so a plain SIGTERM to `child` can leave that

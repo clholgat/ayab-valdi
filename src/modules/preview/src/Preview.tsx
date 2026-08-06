@@ -11,6 +11,7 @@ import {
 } from "constants/src/NeedleColors";
 import { TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from "constants/src/UiTheme";
 import { MachineCapabilities } from "machine_job/src/MachineCapabilities";
+import { preflightMachineJob } from "machine_job/src/PreflightMachineJob";
 import {
   InspectMachineJobResult,
   inspectMachineJob,
@@ -18,6 +19,12 @@ import {
 import { decodeMachineJobText } from "machine_job/src/MachineJobText";
 import { MachineJob } from "machine_job/src/MachineJobTypes";
 import { machineJobIdentity } from "machine_job/src/MachineJobChecksum";
+import {
+  InspectKnitoutResult,
+  inspectKnitout,
+} from "knitout/src/InspectKnitout";
+import { requestedKnitoutPlacement } from "knitout/src/KnitoutToMachineJob";
+import { KnitoutPlacement } from "knitout/src/KnitoutTypes";
 import {
   ExecutionCheckpoint,
   MachineJobIdentity,
@@ -139,6 +146,11 @@ interface State {
   machineJobCheckpoint?: ExecutionCheckpoint;
   machineJobRecoveryLoading?: boolean;
   machineJobRecoveryError?: string;
+  knitoutFileName?: string;
+  knitoutSourceText?: string;
+  knitoutInspection?: InspectKnitoutResult;
+  knitoutPlacement?: KnitoutPlacement;
+  knitoutCarrierOrder?: string[];
 }
 
 export class Preview extends StatefulComponent<PreviewViewModel, State> {
@@ -165,6 +177,19 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
       this.viewModel.initialMachineJobRevision !== previous?.initialMachineJobRevision
     ) {
       this.loadInitialMachineJob();
+    }
+    if (
+      this.state.knitoutSourceText &&
+      this.state.knitoutFileName &&
+      this.viewModel.machineJobCapabilities?.profileId !==
+        previous?.machineJobCapabilities?.profileId
+    ) {
+      this.inspectKnitoutSource(
+        this.state.knitoutSourceText,
+        this.state.knitoutFileName,
+        this.state.knitoutPlacement,
+        this.state.knitoutCarrierOrder,
+      );
     }
     const revision = this.viewModel.imageBitsRevision;
     if (
@@ -385,6 +410,11 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     if (event.text === undefined && !event.dataUrl && !event.path) return;
     if (!capabilities) {
       this.setState({
+        knitoutFileName: undefined,
+        knitoutSourceText: undefined,
+        knitoutInspection: undefined,
+        knitoutPlacement: undefined,
+        knitoutCarrierOrder: undefined,
         machineJobFileName: fileName,
         machineJobInspection: undefined,
         machineJobIdentity: undefined,
@@ -413,6 +443,11 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
       if (json.length === 0) throw new Error("Machine job file is empty.");
       const inspection = inspectMachineJob(json, capabilities);
       this.setState({
+        knitoutFileName: undefined,
+        knitoutSourceText: undefined,
+        knitoutInspection: undefined,
+        knitoutPlacement: undefined,
+        knitoutCarrierOrder: undefined,
         machineJobFileName: fileName,
         machineJobInspection: inspection,
         machineJobIdentity: inspection.ok
@@ -434,6 +469,11 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
       }
     } catch (error) {
       this.setState({
+        knitoutFileName: undefined,
+        knitoutSourceText: undefined,
+        knitoutInspection: undefined,
+        knitoutPlacement: undefined,
+        knitoutCarrierOrder: undefined,
         machineJobFileName: fileName,
         machineJobInspection: undefined,
         machineJobIdentity: undefined,
@@ -444,6 +484,146 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
           error instanceof Error ? error.message : "Could not read machine job.",
       });
     }
+  };
+
+  private readExecutableJobText(event: FilePickerOnSelectEvent): string {
+    if (event.text !== undefined) return event.text;
+    let bytes: Uint8Array;
+    if (event.dataUrl) {
+      bytes = dataUrlToBytes(event.dataUrl);
+    } else if (event.path && typeof readFileBytes === "function") {
+      bytes = readFileBytes(event.path);
+    } else {
+      throw new Error("Executable job contents are unavailable from the file picker.");
+    }
+    return decodeMachineJobText(bytes);
+  }
+
+  private handleExecutableJobSelect = (event: FilePickerOnSelectEvent): void => {
+    if (event.text === undefined && !event.dataUrl && !event.path) return;
+    const fileName = event.fileName ?? "Executable job";
+    try {
+      const text = this.readExecutableJobText(event);
+      if (/\.(k|knitout)$/i.test(fileName) || text.trimStart().startsWith(";!knitout-")) {
+        this.inspectKnitoutSource(text, fileName);
+      } else {
+        this.handleMachineJobSelect({ text, fileName });
+      }
+    } catch (error) {
+      this.setState({
+        knitoutFileName: fileName,
+        knitoutSourceText: undefined,
+        knitoutInspection: undefined,
+        machineJobFileName: fileName,
+        machineJobInspection: undefined,
+        machineJobIdentity: undefined,
+        machineJobCheckpoint: undefined,
+        machineJobRecoveryLoading: false,
+        machineJobRecoveryError: undefined,
+        machineJobReadError:
+          error instanceof Error ? error.message : "Could not read executable job.",
+      });
+    }
+  };
+
+  private inspectKnitoutSource(
+    sourceText: string,
+    fileName: string,
+    placement?: KnitoutPlacement,
+    carrierOrder?: string[],
+  ): void {
+    const capabilities = this.viewModel.machineJobCapabilities;
+    const generation = ++this.machineJobLoadGeneration;
+    if (!capabilities) {
+      this.setState({
+        knitoutFileName: fileName,
+        knitoutSourceText: sourceText,
+        knitoutInspection: undefined,
+        machineJobFileName: fileName,
+        machineJobInspection: undefined,
+        machineJobIdentity: undefined,
+        machineJobCheckpoint: undefined,
+        machineJobRecoveryLoading: false,
+        machineJobRecoveryError: undefined,
+        machineJobReadError: "Select a machine configuration before inspecting this Knitout file.",
+      });
+      return;
+    }
+    const inspection = inspectKnitout(sourceText, {
+      machine: capabilities,
+      fileName,
+      placement,
+      carrierOrder,
+    });
+    const resolvedPlacement = inspection.ok
+      ? placement ?? requestedKnitoutPlacement(inspection.document)
+      : placement ?? "center";
+    const resolvedCarrierOrder = inspection.ok
+      ? carrierOrder ?? inspection.document.declaredCarriers.filter(
+          (carrier) => inspection.analysis.carriers.includes(carrier),
+        )
+      : carrierOrder;
+    if (inspection.ok && inspection.compilation.ok) {
+      const job = inspection.compilation.job;
+      const identity = machineJobIdentity(job.jobId, inspection.compilation.canonicalText);
+      this.setState({
+        knitoutFileName: fileName,
+        knitoutSourceText: sourceText,
+        knitoutInspection: inspection,
+        knitoutPlacement: resolvedPlacement,
+        knitoutCarrierOrder: resolvedCarrierOrder,
+        machineJobFileName: fileName,
+        machineJobInspection: {
+          ok: true,
+          job,
+          preflight: preflightMachineJob(job, capabilities),
+        },
+        machineJobIdentity: identity,
+        machineJobCheckpoint: undefined,
+        machineJobRecoveryLoading: true,
+        machineJobRecoveryError: undefined,
+        machineJobReadError: undefined,
+      });
+      void this.loadMachineJobRecovery(job, identity, capabilities.profileId, generation);
+      return;
+    }
+    this.setState({
+      knitoutFileName: fileName,
+      knitoutSourceText: sourceText,
+      knitoutInspection: inspection,
+      knitoutPlacement: resolvedPlacement,
+      knitoutCarrierOrder: resolvedCarrierOrder,
+      machineJobFileName: fileName,
+      machineJobInspection: undefined,
+      machineJobIdentity: undefined,
+      machineJobCheckpoint: undefined,
+      machineJobRecoveryLoading: false,
+      machineJobRecoveryError: undefined,
+      machineJobReadError: undefined,
+    });
+  }
+
+  private handleCycleKnitoutPlacement = (): void => {
+    const sourceText = this.state.knitoutSourceText;
+    const fileName = this.state.knitoutFileName;
+    if (!sourceText || !fileName) return;
+    const placements: KnitoutPlacement[] = ["keep", "left", "center", "right"];
+    const current = placements.indexOf(this.state.knitoutPlacement ?? "center");
+    const next = placements[(current + 1) % placements.length]!;
+    this.inspectKnitoutSource(sourceText, fileName, next, this.state.knitoutCarrierOrder);
+  };
+
+  private handleSwapKnitoutCarriers = (): void => {
+    const sourceText = this.state.knitoutSourceText;
+    const fileName = this.state.knitoutFileName;
+    const carrierOrder = this.state.knitoutCarrierOrder;
+    if (!sourceText || !fileName || carrierOrder?.length !== 2) return;
+    this.inspectKnitoutSource(
+      sourceText,
+      fileName,
+      this.state.knitoutPlacement,
+      carrierOrder.slice().reverse(),
+    );
   };
 
   private async loadMachineJobRecovery(
@@ -664,6 +844,17 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
                 font={BUTTON_FONT_SMALL}
               />
             </layout>
+            <layout style={styles.filePickerRow}>
+              <label style={styles.openPatternLabel} value="Open job" />
+              <layout style={styles.filePickerWrap}>
+                <FilePicker
+                  accept=".machine-job.json,.json,.k,.knitout,application/json,text/plain"
+                  readContent={Device.isWeb()}
+                  onSelect={this.handleExecutableJobSelect}
+                />
+              </layout>
+            </layout>
+            {this.renderKnitoutInspection()}
             {this.renderMachineJobInspection()}
             {this.state.selectedImageName ? (
               <view accessibilityId="preview-image-name">
@@ -754,7 +945,224 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     </view>;
   }
 
+  private renderKnitoutInspection(): void {
+    const inspection = this.state.knitoutInspection;
+    if (!inspection) return;
+    const title = this.state.knitoutFileName ?? "Knitout job";
+    if (!inspection.ok) {
+      const first = inspection.diagnostics[0];
+      <view accessibilityId="knitout-inspection" style={styles.jobCard}>
+        <label style={styles.jobTitle} value={title} />
+        <label
+          accessibilityId="knitout-compatibility"
+          style={styles.jobError}
+          value={`Invalid Knitout${first?.line ? ` at line ${first.line}` : ""}: ${first?.message ?? "failed validation"}`}
+        />
+      </view>;
+      return;
+    }
+
+    const compilation = inspection.compilation;
+    const blocking = compilation.diagnostics.filter(
+      (diagnostic) => diagnostic.severity === "error",
+    );
+    const warnings = compilation.diagnostics.filter(
+      (diagnostic) => diagnostic.severity === "warning",
+    );
+    const passCount = compilation.ok ? compilation.job.rows.length : inspection.analysis.candidatePasses;
+    const sourceRange = inspection.analysis.minNeedle === undefined
+      ? "no needles"
+      : `source needles ${inspection.analysis.minNeedle}–${inspection.analysis.maxNeedle}`;
+    const carrierText = this.state.knitoutCarrierOrder?.join(" → ") || "none";
+    <view accessibilityId="knitout-inspection" style={styles.jobCard}>
+      <label style={styles.jobTitle} value={title} />
+      <label
+        accessibilityId="knitout-summary"
+        style={styles.jobMeta}
+        value={`Knitout ${inspection.document.version} · ${inspection.analysis.operationCount} operations · ${passCount} passes · ${sourceRange}`}
+      />
+      <label
+        accessibilityId="knitout-compatibility"
+        style={compilation.ok ? styles.jobCompatible : styles.jobError}
+        value={
+          compilation.ok
+            ? "Compatible with AYAB's conservative Knitout profile"
+            : `${blocking.length} blocking compatibility issue${blocking.length === 1 ? "" : "s"}`
+        }
+      />
+      {blocking.slice(0, 4).map((diagnostic, index) => (
+        <label
+          key={`knitout-issue-${index}`}
+          accessibilityId={`knitout-issue-${index}`}
+          style={styles.jobError}
+          value={`${diagnostic.line ? `Line ${diagnostic.line}: ` : ""}${diagnostic.message}`}
+        />
+      ))}
+      {blocking.length > 4 ? (
+        <label
+          style={styles.jobMeta}
+          value={`And ${blocking.length - 4} more blocking issue${blocking.length - 4 === 1 ? "" : "s"}.`}
+        />
+      ) : undefined}
+      {warnings.length > 0 ? (
+        <label
+          accessibilityId="knitout-warnings"
+          style={styles.jobMeta}
+          value={`${warnings.length} non-blocking warning${warnings.length === 1 ? "" : "s"}`}
+        />
+      ) : undefined}
+      <label
+        accessibilityId="knitout-placement"
+        style={styles.jobMeta}
+        value={`Placement: ${this.state.knitoutPlacement ?? "center"} · carrier order: ${carrierText}`}
+      />
+      <layout style={styles.jobAction}>
+        <CoreButton
+          accessibilityId="knitout-cycle-placement"
+          text="Change placement"
+          onTap={this.handleCycleKnitoutPlacement}
+          disabled={this.viewModel.isKnitting === true}
+          coloring={CoreButtonColoring.SECONDARY}
+          sizing={CoreButtonSizing.SMALL}
+          font={BUTTON_FONT_SMALL}
+        />
+        {this.state.knitoutCarrierOrder?.length === 2 ? (
+          <CoreButton
+            accessibilityId="knitout-swap-carriers"
+            text="Swap yarn A/B"
+            onTap={this.handleSwapKnitoutCarriers}
+            disabled={this.viewModel.isKnitting === true}
+            coloring={CoreButtonColoring.SECONDARY}
+            sizing={CoreButtonSizing.SMALL}
+            font={BUTTON_FONT_SMALL}
+          />
+        ) : undefined}
+      </layout>
+      {compilation.ok ? (
+        <view accessibilityId="knitout-pass-preview" style={styles.passPreview}>
+          <label style={styles.jobTitle} value="Needle-selection preview" />
+          {compilation.job.rows.slice(0, 4).map((row, index) => {
+            const pass = row.passes[0]!;
+            const bits = pass.selection.encoding === "bitmap"
+              ? pass.selection.bits
+              : pass.selection.indices.join(",");
+            const arrow = pass.direction === "leftToRight" ? "→" : "←";
+            return (
+              <label
+                key={`knitout-pass-${index}`}
+                accessibilityId={`knitout-pass-${index}`}
+                style={styles.jobMeta}
+                value={`Pass ${index + 1} ${arrow} ${pass.activeNeedles.left}–${pass.activeNeedles.right} · ${pass.yarnIds.join("/")} · ${bits}`}
+              />
+            );
+          })}
+          {compilation.job.rows.length > 4 ? (
+            <label
+              style={styles.jobMeta}
+              value={`${compilation.job.rows.length - 4} more passes`}
+            />
+          ) : undefined}
+        </view>
+      ) : undefined}
+      {this.renderMachineJobActions(passCount)}
+    </view>;
+  }
+
+  private renderMachineJobActions(passCount: number): void {
+    const inspection = this.state.machineJobInspection;
+    const checkpoint = this.state.machineJobCheckpoint;
+    if (inspection?.ok && inspection.preflight.compatible && this.viewModel.onSimulateMachineJob) {
+      <layout style={styles.jobAction}>
+        {checkpoint ? (
+          <CoreButton
+            accessibilityId="machine-job-resume"
+            text={`Resume at pass ${checkpoint.nextPassIndex + 1}`}
+            onTap={this.handleResumeMachineJob}
+            disabled={
+              this.viewModel.isKnitting === true ||
+              this.state.machineJobRecoveryLoading === true
+            }
+            coloring={CoreButtonColoring.PRIMARY}
+            sizing={CoreButtonSizing.SMALL}
+            font={BUTTON_FONT_SMALL}
+          />
+        ) : undefined}
+        {checkpoint && checkpoint.nextPassIndex > 0 ? (
+          <CoreButton
+            accessibilityId="machine-job-rewind"
+            text="Rewind one pass"
+            onTap={this.handleRewindMachineJob}
+            disabled={
+              this.viewModel.isKnitting === true ||
+              this.state.machineJobRecoveryLoading === true
+            }
+            coloring={CoreButtonColoring.SECONDARY}
+            sizing={CoreButtonSizing.SMALL}
+            font={BUTTON_FONT_SMALL}
+          />
+        ) : undefined}
+        {checkpoint ? (
+          <CoreButton
+            accessibilityId="machine-job-discard"
+            text="Discard progress"
+            onTap={this.handleDiscardMachineJob}
+            disabled={
+              this.viewModel.isKnitting === true ||
+              this.state.machineJobRecoveryLoading === true
+            }
+            coloring={CoreButtonColoring.TERTIARY}
+            sizing={CoreButtonSizing.SMALL}
+            font={BUTTON_FONT_SMALL}
+          />
+        ) : undefined}
+        <CoreButton
+          accessibilityId="machine-job-simulate"
+          text={
+            this.viewModel.isKnitting
+              ? "Simulation running"
+              : checkpoint
+                ? "Restart simulation"
+                : "Simulate job"
+          }
+          onTap={this.handleSimulateMachineJob}
+          disabled={this.viewModel.isKnitting === true}
+          coloring={CoreButtonColoring.SECONDARY}
+          sizing={CoreButtonSizing.SMALL}
+          font={BUTTON_FONT_SMALL}
+        />
+        {this.viewModel.onKnitMachineJob ? (
+          <CoreButton
+            accessibilityId="machine-job-knit"
+            text={checkpoint ? "Resume on machine" : "Knit job on machine"}
+            onTap={this.handleKnitMachineJob}
+            disabled={this.viewModel.isKnitting === true || this.state.machineJobRecoveryLoading === true}
+            coloring={CoreButtonColoring.PRIMARY}
+            sizing={CoreButtonSizing.SMALL}
+            font={BUTTON_FONT_SMALL}
+          />
+        ) : undefined}
+      </layout>;
+    }
+    if (this.state.machineJobRecoveryLoading) {
+      <label style={styles.jobMeta} value="Checking recovery state…" />;
+    } else if (checkpoint) {
+      <label
+        accessibilityId="machine-job-recovery"
+        style={styles.jobMeta}
+        value={`${checkpoint.nextPassIndex} of ${passCount} passes safely completed`}
+      />;
+    }
+    if (this.state.machineJobRecoveryError) {
+      <label
+        accessibilityId="machine-job-recovery-error"
+        style={styles.jobError}
+        value={this.state.machineJobRecoveryError}
+      />;
+    }
+  }
+
   private renderMachineJobInspection(): void {
+    if (this.state.knitoutInspection) return;
     const inspection = this.state.machineJobInspection;
     const readError = this.state.machineJobReadError;
     if (!inspection && !readError) return;
@@ -782,7 +1190,6 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
     const status = result.preflight.compatible
       ? "Compatible with selected machine"
       : `${result.preflight.issues.length} compatibility issue${result.preflight.issues.length === 1 ? "" : "s"}`;
-    const checkpoint = this.state.machineJobCheckpoint;
     <view accessibilityId="machine-job-inspection" style={styles.jobCard}>
       <label style={styles.jobTitle} value={result.job.title} />
       <label
@@ -801,94 +1208,7 @@ export class Preview extends StatefulComponent<PreviewViewModel, State> {
           value={result.preflight.issues[0]!.message}
         />
       ) : undefined}
-      {result.preflight.compatible && this.viewModel.onSimulateMachineJob ? (
-        <layout style={styles.jobAction}>
-          {checkpoint ? (
-            <CoreButton
-              accessibilityId="machine-job-resume"
-              text={`Resume at pass ${checkpoint.nextPassIndex + 1}`}
-              onTap={this.handleResumeMachineJob}
-              disabled={
-                this.viewModel.isKnitting === true ||
-                this.state.machineJobRecoveryLoading === true
-              }
-              coloring={CoreButtonColoring.PRIMARY}
-              sizing={CoreButtonSizing.SMALL}
-              font={BUTTON_FONT_SMALL}
-            />
-          ) : undefined}
-          {checkpoint && checkpoint.nextPassIndex > 0 ? (
-            <CoreButton
-              accessibilityId="machine-job-rewind"
-              text="Rewind one pass"
-              onTap={this.handleRewindMachineJob}
-              disabled={
-                this.viewModel.isKnitting === true ||
-                this.state.machineJobRecoveryLoading === true
-              }
-              coloring={CoreButtonColoring.SECONDARY}
-              sizing={CoreButtonSizing.SMALL}
-              font={BUTTON_FONT_SMALL}
-            />
-          ) : undefined}
-          {checkpoint ? (
-            <CoreButton
-              accessibilityId="machine-job-discard"
-              text="Discard progress"
-              onTap={this.handleDiscardMachineJob}
-              disabled={
-                this.viewModel.isKnitting === true ||
-                this.state.machineJobRecoveryLoading === true
-              }
-              coloring={CoreButtonColoring.TERTIARY}
-              sizing={CoreButtonSizing.SMALL}
-              font={BUTTON_FONT_SMALL}
-            />
-          ) : undefined}
-          <CoreButton
-            accessibilityId="machine-job-simulate"
-            text={
-              this.viewModel.isKnitting
-                ? "Simulation running"
-                : checkpoint
-                  ? "Restart simulation"
-                  : "Simulate job"
-            }
-            onTap={this.handleSimulateMachineJob}
-            disabled={this.viewModel.isKnitting === true}
-            coloring={CoreButtonColoring.SECONDARY}
-            sizing={CoreButtonSizing.SMALL}
-            font={BUTTON_FONT_SMALL}
-          />
-          {this.viewModel.onKnitMachineJob ? (
-            <CoreButton
-              accessibilityId="machine-job-knit"
-              text={checkpoint ? "Resume on machine" : "Knit job on machine"}
-              onTap={this.handleKnitMachineJob}
-              disabled={this.viewModel.isKnitting === true || this.state.machineJobRecoveryLoading === true}
-              coloring={CoreButtonColoring.PRIMARY}
-              sizing={CoreButtonSizing.SMALL}
-              font={BUTTON_FONT_SMALL}
-            />
-          ) : undefined}
-        </layout>
-      ) : undefined}
-      {this.state.machineJobRecoveryLoading ? (
-        <label style={styles.jobMeta} value="Checking recovery state…" />
-      ) : checkpoint ? (
-        <label
-          accessibilityId="machine-job-recovery"
-          style={styles.jobMeta}
-          value={`${checkpoint.nextPassIndex} of ${summary.passes} passes safely completed`}
-        />
-      ) : undefined}
-      {this.state.machineJobRecoveryError ? (
-        <label
-          accessibilityId="machine-job-recovery-error"
-          style={styles.jobError}
-          value={this.state.machineJobRecoveryError}
-        />
-      ) : undefined}
+      {this.renderMachineJobActions(summary.passes)}
     </view>;
   }
 }
@@ -975,6 +1295,15 @@ const styles = {
     flexDirection: "row",
     flexWrap: "wrap",
     marginTop: 8,
+  }),
+  passPreview: new Style<View>({
+    width: "100%",
+    flexDirection: "column",
+    padding: 6,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: SIDEBAR_CARD_BORDER,
+    borderRadius: 4,
   }),
   emptyStateBlock: new Style<Layout>({
     width: "100%",

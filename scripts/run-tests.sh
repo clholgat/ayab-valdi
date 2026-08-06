@@ -8,6 +8,9 @@ cd "$ROOT/src"
 
 bazel test //modules/serial:test \
   //modules/state_machine:test \
+  //modules/knitout:test \
+  //modules/machine_job:test \
+  //modules/knit_session:test \
   //modules/ayab_valdi:test \
   //modules/preview:test \
   //modules/app_settings:test \

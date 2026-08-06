@@ -11,6 +11,7 @@ import { hardwareTestSpec } from "./specs/hardware-test.mjs";
 import { loadImageSpec } from "./specs/load-image.mjs";
 import { annotatedImageSpec } from "./specs/annotated-image.mjs";
 import { machineJobImportSpec } from "./specs/machine-job-import.mjs";
+import { knitoutImportSpec } from "./specs/knitout-import.mjs";
 import { settingsSpec } from "./specs/settings.mjs";
 import { firstRunTourSpec } from "./specs/first-run-tour.mjs";
 import { previewTransformsSpec } from "./specs/preview-transforms.mjs";
@@ -35,6 +36,7 @@ const allSpecs = [
   { name: "load-image", fn: loadImageSpec },
   { name: "annotated-image", fn: annotatedImageSpec },
   { name: "machine-job-import", fn: machineJobImportSpec },
+  { name: "knitout-import", fn: knitoutImportSpec },
   { name: "load-pat", fn: loadPatSpec },
   { name: "validation", fn: validationSpec },
   { name: "simulation-knit", fn: simulationKnitSpec },
@@ -90,7 +92,10 @@ async function runSpec(spec) {
     await spec.fn(ctx);
   } catch (error) {
     if (!error.screenshotPath) {
-      throw await captureFailure(page, spec.name);
+      const captured = await captureFailure(page, spec.name);
+      captured.message = `${error instanceof Error ? error.message : String(error)} — screenshot saved to ${captured.screenshotPath}`;
+      captured.cause = error;
+      throw captured;
     }
     throw error;
   } finally {

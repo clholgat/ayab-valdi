@@ -79,6 +79,7 @@ import { CheckpointRepository } from "knit_session/src/CheckpointRepository";
 import { MachineJobCheckpointRecorder } from "knit_session/src/MachineJobCheckpointRecorder";
 import { MachineJobPromptModal } from "./MachineJobPromptModal";
 import { createDefaultCheckpointStore } from "knit_session/src/PersistentCheckpointStore";
+import { ayabMachineCapabilities } from "./AyabMachineCapabilities";
 
 /**
  * @ViewModel
@@ -790,6 +791,13 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
         ? session.control.machine
         : this.state.preferences.machine;
     const previewPalette = this.getPreviewPalette(Machine.width(machine));
+    const machineJobCapabilities = ayabMachineCapabilities({
+      machine,
+      mode:
+        this.state.currentImageSettings?.mode ??
+        this.state.preferences.defaultKnittingMode,
+      numColors: this.state.currentImageSettings?.numColors ?? 2,
+    });
     const knitDisabled = isKnitButtonDisabled({
       isKnitting: this.state.isKnitting,
       isHardwareTesting: this.state.isHardwareTesting,
@@ -852,6 +860,16 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
                 tourStep?.targetId === "checklist-target-pattern"
               }
               tourBubble={tourBubble}
+              machineJobCapabilities={machineJobCapabilities}
+              onSimulateMachineJob={this.handleSimulateMachineJob}
+              onKnitMachineJob={
+                this.viewModel.enableMachineIo === false
+                  ? undefined
+                  : this.handleKnitMachineJob
+              }
+              initialMachineJobJson={this.viewModel.initialMachineJobJson}
+              initialMachineJobFileName={this.viewModel.initialMachineJobFileName}
+              initialMachineJobRevision={this.viewModel.initialMachineJobRevision}
             />
           </layout>
           {this.renderInlineSidebar(previewPalette, knitDisabled, knitDisabledReason, tourStep, tourBubble)}
@@ -983,6 +1001,13 @@ export class App extends StatefulComponent<AppViewModel, AppComponentContext> {
     requestedResumePassIndex?: number,
     useHardware: boolean = false,
   ): Promise<void> => {
+    // A cancelled KnitSession releases its transport and clears the shared
+    // active-run guard asynchronously. Wait here before loading/creating a
+    // checkpoint so an immediate Resume click cannot capture the previous
+    // run's `isKnitting` state and silently return after that wait.
+    await awaitActiveKnitRun();
+    if (this.isDestroyed() || this.state.isKnitting) return;
+
     const totalPasses = job.rows.reduce(
       (total, row) => total + row.passes.length,
       0,
