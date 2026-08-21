@@ -39,6 +39,7 @@ valdi_module(
         "@valdi_widgets//valdi_modules/widgets",
         "@valdi_widgets//valdi_modules/valdi_standalone_ui",
         "//modules/process_image",
+        "//modules/knitout",
         "//modules/machine_job",
         "//modules/knit_session",
         "//modules/constants",

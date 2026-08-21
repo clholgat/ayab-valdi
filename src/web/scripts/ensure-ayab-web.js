@@ -33,8 +33,12 @@ function copyAyabWebToStableCache() {
   fs.cpSync(bazelAyabWebDir, stableAyabWebDir, { recursive: true });
 }
 
-if (!isBazelBuilt()) {
-  console.log('Building ayab_web (required for webpack)...');
+// Always ask Bazel for the target unless the E2E runner already did so before
+// spawning webpack. An incremental check keeps the stable cache fresh after
+// source edits; the opt-out avoids npm's `preserve` lifecycle hook performing
+// the same build a second time while the server readiness timer is running.
+if (process.env.AYAB_WEB_ALREADY_ENSURED !== '1') {
+  console.log('Building ayab_web (incremental when up to date)...');
   execSync('bazel build :ayab_web --define disable_minify_web=true', {
     cwd: workspaceRoot,
     stdio: 'inherit',

@@ -67,17 +67,21 @@ export async function machineJobImportSpec(ctx) {
 
   await clickByA11yId(page, "machine-job-resume");
   await waitForA11yId(page, "cancel-button", 15000);
-  await waitForText(page, "Please knit", 30000);
+  // Cancel as soon as the session is live. The browser simulation can finish
+  // this one-pass fixture before a text-poll plus click round trip completes.
   await clickByA11yId(page, "cancel-button");
   await waitForText(page, "Progress was retained for recovery", 15000);
-  const retainedStatus = await page.evaluate(() => {
+  const retainedCheckpoint = await page.evaluate(() => {
     const raw = localStorage.getItem(
       "valdi.PersistentStore.ayab_machine_job_checkpoints",
     );
     const store = raw ? JSON.parse(raw) : undefined;
-    return store?.active?.s ? JSON.parse(store.active.s).status : undefined;
+    return store?.active?.s ? JSON.parse(store.active.s) : undefined;
   });
-  assert(retainedStatus === "active", "Expected cancel to retain active progress");
+  assert(
+    retainedCheckpoint?.status === "active",
+    `Expected cancel to retain active progress, got ${JSON.stringify(retainedCheckpoint)}`,
+  );
 
   await clickByA11yId(page, "machine-job-resume");
   await waitForText(page, "Machine job simulation completed", 30000);

@@ -15,6 +15,7 @@ This project is an **experimental port** — not an official AYAB release. For p
 
 - Serial port discovery (native + Web Serial in the browser)
 - Image loading (PNG, JPG, BMP, GIF, TIFF) and DAK `.pat` import
+- Experimental Knitout 2 import for AYAB-compatible front-bed stockinette and two-color fair-isle jobs
 - Image transforms (rotate, flip, invert, repeat)
 - Knit settings (mode, colors, needles, alignment, inf repeat)
 - Zoomable preview with machine bed visualization
@@ -24,6 +25,7 @@ This project is an **experimental port** — not an official AYAB release. For p
 - Broad unit and E2E test coverage
 
 See [PORT_AUDIT_AND_PLAN.md](PORT_AUDIT_AND_PLAN.md) for parity details vs. ayab-desktop.
+See [AYAB's Knitout profile](docs/knitout-ayab-profile.md) before knitting a `.k` file on hardware.
 
 ## Platform support
 
@@ -118,6 +120,9 @@ cd ayab-valdi/src
 # All module unit tests
 bazel test //modules/serial:test \
   //modules/state_machine:test \
+  //modules/knitout:test \
+  //modules/machine_job:test \
+  //modules/knit_session:test \
   //modules/ayab_valdi:test \
   //modules/preview:test \
   //modules/app_settings:test \
@@ -154,6 +159,9 @@ ayab-valdi/
 │   │   ├── image_settings/    # Knit settings UI
 │   │   ├── app_settings/      # Preferences storage and screen
 │   │   ├── process_image/     # Image loading, .pat/.stp/.cut import
+│   │   ├── knitout/           # Knitout parser, analyzer, and conservative AYAB compiler
+│   │   ├── machine_job/       # Portable executable-job contract and preflight
+│   │   ├── knit_session/      # Durable pass checkpoints and recovery
 │   │   └── constants/         # Shared types, tokens, UI theme
 │   ├── patches/               # Local patches applied to upstream Valdi/Widgets
 │   └── web/                   # Webpack dev server for ayab_web

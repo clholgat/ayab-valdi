@@ -129,7 +129,13 @@
           "additionalProperties": false
         },
         "selection": { "$ref": "#/$defs/selection" },
-        "yarnIds": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonEmptyString" }, "uniqueItems": true },
+        "yarnIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" },
+          "uniqueItems": true,
+          "description": "Ordered yarn choices: selection bit 1 chooses yarnIds[0], bit 0 chooses yarnIds[1] inside activeNeedles; one-yarn stockinette passes select every active needle."
+        },
         "technique": { "$ref": "#/$defs/nonEmptyString" },
         "carriage": { "type": "string" },
         "sourceRef": { "$ref": "#/$defs/sourceRef" }
