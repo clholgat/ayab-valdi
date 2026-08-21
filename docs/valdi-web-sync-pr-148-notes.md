@@ -11,6 +11,11 @@ Valdi commit `08a94ae1ba4624b0d6f0d139eb27f2ea4a560068`.
 - All 11 project Bazel test targets pass.
 - All 17 browser E2E workflows pass.
 - The Web simulation workflow was also verified manually.
+- In the downstream `pattern_website` consumer, `npm run build` succeeds and
+  `npm run verify` passes the canonical Valdi test target plus exported Web
+  package build.
+- The downstream `/projects` deep link was verified visually after it
+  canonicalized to `/tools/projects` and rendered the expected project UI.
 
 ## 1. External Web dependency paths can escape the collapsed output tree
 
@@ -147,3 +152,92 @@ generated, statically enumerable registry, or otherwise constrain/suppress the
 known context deliberately and add a bundle test that fails for an unregistered
 component.
 
+## 6. Native-module override ownership and transitivity are fragile
+
+**Impact:** downstream builds can fail either during Valdi compilation or later
+in Webpack, depending on which module declares the override.
+
+`pattern_website` has a native `raster_image/src/RasterImage.tsx` implementation
+and a Web implementation at `raster_image/web/RasterImageWeb.ts`. Keeping the
+override on the owning `raster_image` `valdi_module` makes the PR compiler emit
+both the concrete TSX output and generated Web shim to:
+
+```text
+web/debug/assets/raster_image/src/RasterImage.js
+```
+
+The compiler then fails with `Multiple .finalFile items writing to the same
+output URL`. Separately, AYAB's `process_image` override is declared in the
+dependency, but it is not propagated into the downstream collapsed Web package;
+Webpack reports unresolved `process_image/src/ProcessImageNative` imports.
+
+**Temporary workaround:** remove the raster override from its owning module and
+redeclare both the raster and process-image mappings on the consuming
+`pattern_website` module.
+
+**Suggested upstream fix:** define one unambiguous ownership model for these
+mappings, aggregate valid mappings transitively, and suppress/replace the
+concrete output when a shim intentionally targets the same module ID. The
+duplicate-output diagnostic should also identify the generated shim instead of
+presenting it as a second source file.
+
+## 7. The public browser-history navigation surface was removed
+
+**Impact:** `pattern_website` no longer compiles because it imports
+`web_renderer/src/WebNavStack` and `web_renderer/src/RouteRegistry` for browser
+history, deep links, canonical URLs, and custom route construction.
+
+The replacement `WebNavigationHost`/`WebNavigator` implementation does not
+expose equivalent URL, route-registry, restore-from-location, or `popstate`
+behavior. Adopting it directly would require the application to reintroduce a
+custom browser-history bridge.
+
+**Temporary workaround:** the downstream project patches the three previous
+compatibility files (`WebNavStack.ts`, `RouteRegistry.ts`, and the previous
+`WebNavigator.ts`) back into `web_renderer`, with renderer teardown updated from
+`destroy()` to the PR's `onDestroy()` lifecycle method.
+
+**Suggested upstream fix:** retain the compatibility exports until an official
+browser routing API covers route registries, URL builders, deep-link restoration,
+back/forward navigation, and page teardown. A migration guide should identify
+the replacement for each removed behavior.
+
+## 8. Generated `.bin` module entries assume bundler-specific byte handling
+
+**Impact:** Valdi compilation succeeds, but the downstream production Webpack
+build fails with hundreds of errors such as:
+
+```text
+Module parse failed: Unexpected character
+.../preview/src/patterns/annotated/stitchworld-004.png.bin
+```
+
+The PR-generated `_module_entry_registry.js` emits a static `require()` for
+every `.bin` entry. Webpack has no default parser for that extension, and the
+generated package does not provide a loader contract. In this consumer the
+registry exposed 523 such failures at once.
+
+**Temporary workaround:** add a Webpack 5 `asset/bytes` rule for `.bin` so the
+runtime receives a `Uint8Array` and preserves byte-exact pattern images.
+
+**Suggested upstream fix:** make collapsed packages bundler-neutral (for
+example, emit byte-exact registry data directly), or ship and document the
+required bundler configuration. Add an integration fixture containing a binary
+module entry and bundle it with the supported Web toolchain.
+
+## 9. Shadow-root isolation breaks existing browser-level test contracts
+
+**Impact:** the downstream app renders correctly, but its existing Puppeteer
+workflows time out because they use document-level selectors and
+`document.body.innerText`.
+
+PR #148's `ValdiWebRenderer` now attaches an open shadow root to every page host.
+The visible `/tools/projects` screen was confirmed in a screenshot, while the
+same page appeared empty to the current assertions and reported no runtime or
+Webpack error. Its text is available only by traversing the visible page host's
+`shadowRoot`.
+
+**Suggested upstream fix:** publish a stable browser-test query helper or test
+contract that traverses Valdi renderer roots, and document the migration impact
+for host-page selectors, accessibility assertions, and automation. An opt-out or
+compatibility period would reduce surprise for existing Web consumers.
