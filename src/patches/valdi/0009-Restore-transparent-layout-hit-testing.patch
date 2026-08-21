@@ -1,0 +1,16 @@
+Restore the pre-Web-sync hit-testing contract for Valdi layout and view nodes.
+Non-interactive containers must be transparent to pointer hit testing; gesture
+attributes such as onTap explicitly opt their view back in via pointer-events:
+auto. Without this default, absolute layout overlays (including Widgets'
+Subscreen floating slot) block every control beneath them.
+diff --git a/src/valdi_modules/src/valdi/web_renderer/src/elements/LayoutElementClass.ts b/src/valdi_modules/src/valdi/web_renderer/src/elements/LayoutElementClass.ts
+--- a/src/valdi_modules/src/valdi/web_renderer/src/elements/LayoutElementClass.ts
++++ b/src/valdi_modules/src/valdi/web_renderer/src/elements/LayoutElementClass.ts
+@@ -477,4 +477,6 @@ export class LayoutElementClass extends ElementClass {
+   protected onCreateElement(): HTMLElement {
+-    return createBaseElement('div');
++    const element = createBaseElement('div');
++    element.style.pointerEvents = 'none';
++    return element;
+   }
+ }

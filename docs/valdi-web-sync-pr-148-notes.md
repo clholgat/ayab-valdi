@@ -16,6 +16,14 @@ Valdi commit `08a94ae1ba4624b0d6f0d139eb27f2ea4a560068`.
   package build.
 - The downstream `/projects` deep link was verified visually after it
   canonicalized to `/tools/projects` and rendered the expected project UI.
+- A downstream Puppeteer regression test passes real mouse clicks through the
+  Patterns header, a pattern card, the Tools header, and a tool card after the
+  temporary layout hit-testing patch.
+- Three newly reported interaction failures are now pinned by failing real-input
+  browser tests: pattern header/scroll/input behavior and Stitch Chart zoom
+  dragging. The proposed stylesheet bridge and `0010` renderer patch were
+  authored immediately before this handoff, but have **not yet been rebuilt or
+  re-run**. Treat sections 11–13 as reproduced findings with unverified fixes.
 
 ## 1. External Web dependency paths can escape the collapsed output tree
 
@@ -241,3 +249,132 @@ Webpack error. Its text is available only by traversing the visible page host's
 contract that traverses Valdi renderer roots, and document the migration impact
 for host-page selectors, accessibility assertions, and automation. An opt-out or
 compatibility period would reduce surprise for existing Web consumers.
+
+## 10. Non-interactive layout overlays block pointer input
+
+**Impact:** catalog pages render normally, but pattern and tool cards cannot be
+clicked. Header navigation still works, which makes the failure initially look
+like an application routing or gesture-bubbling bug.
+
+The PR's rewritten `LayoutElementClass` creates ordinary `<div>` elements
+without a `pointer-events` default. The previous Web renderer initialized Valdi
+layout/view nodes with `pointer-events: none`, then explicitly opted interactive
+nodes back in when attributes such as `onTap`, `touchEnabled`, or `hitTest` were
+applied. Without that default, Widgets' empty absolute `Subscreen` floating
+layout covers the complete body below the header and wins
+`shadowRoot.elementFromPoint()`, preventing real pointer events from reaching
+the cards underneath.
+
+**Temporary workaround:** `pattern_website` patches `LayoutElementClass` so
+new layout/view `<div>` nodes start with `pointer-events: none`; the existing
+gesture attribute appliers continue to set `pointer-events: auto` on interactive
+views. A Puppeteer regression test performs real mouse clicks through both a
+pattern card and a tool card.
+
+**Suggested upstream fix:** restore transparent hit testing as the default for
+non-interactive Valdi layout/view nodes and add renderer tests for overlapping
+absolute containers. The integration fixture should verify that an empty
+overlay does not intercept clicks while a child with `onTap` remains clickable.
+
+## 11. Renderer shadow roots isolate application layout and print CSS
+
+**Impact:** downstream pattern pages show no usable header, do not scroll, and
+render their print-only copy alongside the interactive screen copy.
+
+`pattern_website` installs responsive-layout and print styles in `document.head`.
+PR #148 creates an open shadow root for every page host, so selectors such as
+`.akf-print-document { display: none }` no longer reach the rendered page.
+The print copy therefore remains in normal flex layout and distorts the screen
+shell. A real-browser reproduction at 1280×720 measured:
+
+```text
+header rect: top=-39.5, bottom=-18.5
+#scrollView: clientHeight=0, scrollHeight=1416, scrollTop=0
+```
+
+The renderer-root text also contained the complete pattern body twice, which
+confirms that the screen and print timelines were both visible.
+
+**Temporary downstream workaround (not yet verified):** `pattern_website` now
+registers its Web CSS in both `document.head` and every existing/future open
+Valdi renderer shadow root. A `MutationObserver` handles page hosts created after
+bootstrap.
+
+**Suggested upstream fix:** provide and document a renderer stylesheet
+registration API that installs application-owned CSS in each isolated root, or
+retain a compatibility mode for apps that rely on document-level media queries.
+Add an integration test covering `@media print`, hidden screen-only content,
+hidden print-only content, and responsive class selectors inside a page host.
+
+## 12. Pointer-transparent layouts also disable text fields and scroll views
+
+**Impact:** after restoring the old transparent-layout default in section 10,
+pattern text boxes cannot be focused or typed into and wheel scrolling cannot
+reach the Valdi scroll view.
+
+The old renderer made layout containers pointer-transparent, but concrete
+interactive element classes opted themselves back in. PR #148's new
+`TextFieldElementClass` and `ScrollElementClass` do not set
+`pointer-events: auto`. The browser reproduction recorded:
+
+```text
+#chestCircumference value: "38" before and after Meta+A, typing "48"
+computed pointer-events: none
+shadowRoot.activeElement === input: false
+elementFromPoint(input center): DIV
+#scrollView wheel result: scrollTop=0
+```
+
+This is the other half of the section 10 contract: setting every layout to
+pointer-active blocks controls behind overlays, while setting layouts to
+pointer-transparent without opting concrete controls back in disables the
+controls themselves.
+
+**Temporary workaround (not yet verified):** copied patch
+`src/patches/valdi/0010-Restore-web-input-scroll-and-mouse-touch-events.patch`
+sets `pointerEvents: 'auto'` when creating Web text fields and scroll views.
+
+**Suggested upstream fix:** encode hit-testing ownership per element class and
+test it as one contract: transparent layout overlays, clickable `onTap` views,
+focusable/editable text fields, and wheel/touch-scrollable scroll views.
+
+## 13. `onTouch` lost desktop mouse support and local coordinates
+
+**Impact:** the Stitch Chart editor's Zoom slider does not react to mouse drag.
+This likely affects every Widgets `Slider` and any Web UI that uses Valdi
+`onTouch` as a cross-input drag primitive.
+
+Widgets' `Slider` listens with `onTouch` and calculates its normalized value as
+`event.x / barWidth`. The previous Web renderer supplied a desktop sequence
+(`mousedown`, document-level `mousemove`, `mouseup`) and reported `x`/`y`
+relative to the target element. PR #148 binds `onTouch` only to browser
+`touchstart`/`touchmove`/`touchend`/`touchcancel`, reports viewport coordinates,
+and—after the necessary transparent-layout fix—leaves the slider at computed
+`pointer-events: none`.
+
+A Puppeteer test dragged across a visible 1043.58×25 slider with a real mouse;
+the label remained `Zoom: 1.0x`.
+
+**Temporary workaround (not yet verified):** copied patch
+`src/patches/valdi/0010-Restore-web-input-scroll-and-mouse-touch-events.patch`
+opts `onTouch` views into hit testing, restores the document-level desktop mouse
+sequence, cleans listeners up with the attribute lifecycle, and supplies
+element-local `x`/`y` while retaining viewport-relative `absoluteX`/`absoluteY`.
+
+**Suggested upstream fix:** restore mouse/pointer parity in `onTouch` (preferably
+with Pointer Events and pointer capture), preserve the documented local versus
+absolute coordinate semantics, and add mouse, touch, drag-outside-bounds, and
+listener-cleanup tests using Widgets' Slider as an integration fixture.
+
+## Copied downstream compatibility patches
+
+The following previously local `pattern_website` patches are now copied into
+AYAB and referenced by `src/MODULE.bazel`:
+
+- `0008-Restore-WebNavStack-route-compatibility.patch`
+- `0009-Restore-transparent-layout-hit-testing.patch`
+- `0010-Restore-web-input-scroll-and-mouse-touch-events.patch`
+
+The other local Valdi patches were not duplicated because AYAB already carries
+equivalent patches under its own numbering: pattern site's `0006` corresponds
+to AYAB `0001`, and pattern site's `0007` corresponds to AYAB `0002`.

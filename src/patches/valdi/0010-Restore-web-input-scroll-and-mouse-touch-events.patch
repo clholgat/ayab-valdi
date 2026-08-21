@@ -1,0 +1,109 @@
+Restore the pre-Web-sync interaction contract for native browser controls and
+Valdi onTouch views. Layout containers are pointer-transparent, so text fields,
+scroll views, and onTouch views must explicitly opt back into hit testing.
+onTouch also needs the desktop mouse sequence used by Widgets' Slider, with
+coordinates local to the target view.
+diff --git a/src/valdi_modules/src/valdi/web_renderer/src/elements/ScrollElementClass.ts b/src/valdi_modules/src/valdi/web_renderer/src/elements/ScrollElementClass.ts
+--- a/src/valdi_modules/src/valdi/web_renderer/src/elements/ScrollElementClass.ts
++++ b/src/valdi_modules/src/valdi/web_renderer/src/elements/ScrollElementClass.ts
+@@ -660,6 +660,7 @@ export class ScrollElementClass extends ElementClass {
+     assignStyles(element, {
+       overflowX: 'hidden',
+       overflowY: 'auto',
++      pointerEvents: 'auto',
+       scrollbarWidth: 'none',
+     });
+     return element;
+diff --git a/src/valdi_modules/src/valdi/web_renderer/src/elements/TextFieldElementClass.ts b/src/valdi_modules/src/valdi/web_renderer/src/elements/TextFieldElementClass.ts
+--- a/src/valdi_modules/src/valdi/web_renderer/src/elements/TextFieldElementClass.ts
++++ b/src/valdi_modules/src/valdi/web_renderer/src/elements/TextFieldElementClass.ts
+@@ -407,6 +407,7 @@ export class TextFieldElementClass extends ElementClass<TextInputElement> {
+       margin: 0,
+       outline: 'none',
+       padding: 0,
++      pointerEvents: 'auto',
+     });
+     return element;
+   }
+diff --git a/src/valdi_modules/src/valdi/web_renderer/src/elements/ViewElementAttributes.ts b/src/valdi_modules/src/valdi/web_renderer/src/elements/ViewElementAttributes.ts
+--- a/src/valdi_modules/src/valdi/web_renderer/src/elements/ViewElementAttributes.ts
++++ b/src/valdi_modules/src/valdi/web_renderer/src/elements/ViewElementAttributes.ts
+@@ -12,5 +12,10 @@
+ import { geometricPathToSvgPath, isGeometricPathValue, SvgGeometricPath } from '../utils/geometricPath';
+ import { isPlainCssNumber, readWhitespaceSeparatedToken, skipCssWhitespace } from '../utils/cssScanner';
+ import { injectTouchAreaStyles } from '../styles/touchAreaExtension';
+-import { AttributeApplierMap, borderAttributeApplier, replaceEventListener } from './ElementClassSupport';
++import {
++  AttributeApplierMap,
++  borderAttributeApplier,
++  replaceEventListener,
++  setApplierCleanup,
++} from './ElementClassSupport';
+ import { getViewPaintElement, getViewPresentationState } from './ViewElementState';
+@@ -130,9 +135,10 @@
+-function createTouchEvent(event: MouseEvent | TouchEvent, state: TouchEventState): ValdiTouchEvent {
++function createTouchEvent(event: MouseEvent | TouchEvent, state: TouchEventState, element?: HTMLElement): ValdiTouchEvent {
+   const touch = 'touches' in event ? event.touches[0] || event.changedTouches[0] : event;
++  const rect = element?.getBoundingClientRect();
+   return {
+     state,
+-    x: touch.clientX,
+-    y: touch.clientY,
++    x: touch.clientX - (rect?.left ?? 0),
++    y: touch.clientY - (rect?.top ?? 0),
+     absoluteX: touch.clientX,
+     absoluteY: touch.clientY,
+     pointerCount: 'touches' in event ? event.touches.length : 1,
+@@ -747,23 +754,48 @@ function buildViewAttributeAppliers(): AttributeApplierMap {
+   binder.bindFunctionAttribute(
+     'onTouch',
+     (element, callback, context) => {
++      element.style.pointerEvents = 'auto';
+       replaceEventListener(element, context, 'view:onTouchStart', 'touchstart', event =>
+-        callback(createTouchEvent(event, TouchEventState.Started)),
++        callback(createTouchEvent(event, TouchEventState.Started, element)),
+       );
+       replaceEventListener(element, context, 'view:onTouchMove', 'touchmove', event =>
+-        callback(createTouchEvent(event, TouchEventState.Changed)),
++        callback(createTouchEvent(event, TouchEventState.Changed, element)),
+       );
+       replaceEventListener(element, context, 'view:onTouchEnd', 'touchend', event =>
+-        callback(createTouchEvent(event, TouchEventState.Ended)),
++        callback(createTouchEvent(event, TouchEventState.Ended, element)),
+       );
+       replaceEventListener(element, context, 'view:onTouchCancel', 'touchcancel', event =>
+-        callback(createTouchEvent(event, TouchEventState.Ended)),
++        callback(createTouchEvent(event, TouchEventState.Ended, element)),
+       );
++      const mouseMove = (event: MouseEvent) => {
++        if (event.buttons === 1) {
++          callback(createTouchEvent(event, TouchEventState.Changed, element));
++        }
++      };
++      const mouseUp = (event: MouseEvent) => {
++        if (event.button !== 0) return;
++        document.removeEventListener('mousemove', mouseMove);
++        document.removeEventListener('mouseup', mouseUp);
++        callback(createTouchEvent(event, TouchEventState.Ended, element));
++      };
++      const mouseDown = (event: MouseEvent) => {
++        if (event.button !== 0) return;
++        callback(createTouchEvent(event, TouchEventState.Started, element));
++        document.addEventListener('mousemove', mouseMove);
++        document.addEventListener('mouseup', mouseUp);
++      };
++      element.addEventListener('mousedown', mouseDown);
++      setApplierCleanup(context, 'view:onTouchMouse', () => {
++        element.removeEventListener('mousedown', mouseDown);
++        document.removeEventListener('mousemove', mouseMove);
++        document.removeEventListener('mouseup', mouseUp);
++      });
+     },
+     (element, context) => {
+       replaceEventListener(element, context, 'view:onTouchStart', 'touchstart', undefined);
+       replaceEventListener(element, context, 'view:onTouchMove', 'touchmove', undefined);
+       replaceEventListener(element, context, 'view:onTouchEnd', 'touchend', undefined);
+       replaceEventListener(element, context, 'view:onTouchCancel', 'touchcancel', undefined);
++      setApplierCleanup(context, 'view:onTouchMouse', undefined);
+     },
+   );
