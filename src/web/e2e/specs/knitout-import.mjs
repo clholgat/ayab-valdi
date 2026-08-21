@@ -24,7 +24,7 @@ export async function knitoutImportSpec(ctx) {
   const { page } = ctx;
   await waitForAppReady(page);
 
-  const inputs = await page.$$('input[type="file"]');
+  const inputs = await page.$$('#root >>> input[type="file"]');
   assert(inputs.length >= 2, "Expected separate pattern and executable-job pickers");
   await inputs[1].uploadFile(fixturePath);
 

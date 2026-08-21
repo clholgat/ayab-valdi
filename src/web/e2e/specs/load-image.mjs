@@ -20,7 +20,7 @@ export async function loadImageSpec(ctx) {
   await waitForAppReady(page);
   await waitForKnitDisabled(page);
 
-  const fileInput = await page.waitForSelector('input[type="file"]', {
+  const fileInput = await page.waitForSelector('#root >>> input[type="file"]', {
     timeout: 15000,
   });
   await fileInput.uploadFile(fixturePath);

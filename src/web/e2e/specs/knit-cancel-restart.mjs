@@ -1,5 +1,6 @@
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   clickByA11yId,
   waitForA11yId,
   waitForAppReady,
@@ -48,7 +49,7 @@ export async function knitCancelRestartWebSerialSpec(ctx) {
   await loadDemoPattern(page);
 
   const connectionStatus = await page.$eval(
-    '[id="connection-status"]',
+    a11ySelector("connection-status"),
     (el) => el.textContent ?? "",
   );
   assert(

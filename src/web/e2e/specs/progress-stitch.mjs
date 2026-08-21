@@ -1,5 +1,6 @@
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   clickByA11yId,
   waitForA11yId,
   waitForAppReady,
@@ -20,7 +21,7 @@ export async function progressStitchSpec(ctx) {
   await clickByA11yId(page, "stitch-cell-0");
   await waitForA11yText(page, "progress-stitch-selection", "Selection:", 10000);
   const selection = await page.$eval(
-    '[id="progress-stitch-selection"]',
+    a11ySelector("progress-stitch-selection"),
     (el) => el.textContent ?? "",
   );
   assert(selection.includes("stitch"), `Expected stitch selection label, got: ${selection}`);

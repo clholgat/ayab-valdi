@@ -797,6 +797,7 @@ export class ImageSettingsComponentInner extends StatefulComponent<
           label="Infinite repeat"
           on={this.state.infRepeat}
           onTap={this.handleInfRepeatToggle}
+          toggleId="infinite-repeat-toggle"
         />
         <ToggleField
           label="Knit side image"

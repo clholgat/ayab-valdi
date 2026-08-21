@@ -1,7 +1,9 @@
 import { assert } from "../helpers/runner.mjs";
-import { clickByA11yId, waitForA11yId } from "../helpers/selectors.mjs";
-
-const sel = (id) => `[id="${id}"]`;
+import {
+  a11ySelector,
+  clickByA11yId,
+  waitForA11yId,
+} from "../helpers/selectors.mjs";
 
 /**
  * The onboarding tour should show once for a fresh install, then stay
@@ -18,12 +20,12 @@ export async function firstRunTourSpec(ctx) {
   await waitForA11yId(page, "app-root", 60000);
 
   await waitForA11yId(page, "onboarding-skip", 15000);
-  const bubbleOnFirstLoad = await page.$(sel("onboarding-bubble"));
+  const bubbleOnFirstLoad = await page.$(a11ySelector("onboarding-bubble"));
   assert(bubbleOnFirstLoad != null, "Onboarding tour should show on a fresh install");
 
   await clickByA11yId(page, "onboarding-skip");
   await page.waitForFunction(
-    () => document.querySelector('[id="onboarding-skip"]') == null,
+    () => document.getElementById("root")?.shadowRoot?.querySelector('[id="onboarding-skip"]') == null,
     { timeout: 5000 },
   );
 
@@ -32,7 +34,7 @@ export async function firstRunTourSpec(ctx) {
 
   // Give the async tour a moment to (incorrectly) reappear before asserting.
   await new Promise((r) => setTimeout(r, 1000));
-  const bubbleAfterReload = await page.$(sel("onboarding-bubble"));
+  const bubbleAfterReload = await page.$(a11ySelector("onboarding-bubble"));
   assert(
     bubbleAfterReload == null,
     "Onboarding tour should not reappear after a page reload once dismissed",

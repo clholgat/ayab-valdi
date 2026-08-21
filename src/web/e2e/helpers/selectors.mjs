@@ -1,15 +1,17 @@
-/** Valdi accessibilityId → DOM id on web (see WebValdiLayout). */
-function sel(id) {
-  return `[id="${id}"]`;
+/** Valdi accessibilityId → DOM id inside the Web renderer's shadow root. */
+export function a11ySelector(id) {
+  return `#root >>> [id="${id}"]`;
 }
+
+const sel = a11ySelector;
 
 export async function waitForAppReady(page, timeoutMs = 90000) {
   await waitForA11yId(page, "app-root", timeoutMs);
   await dismissFirstRunOverlays(page);
   await page.waitForFunction(
     () =>
-      document.querySelector('[id="preview-empty-state"]') != null ||
-      document.querySelector('[id="preview-dimensions"]') != null,
+      document.getElementById("root")?.shadowRoot?.querySelector('[id="preview-empty-state"]') != null ||
+      document.getElementById("root")?.shadowRoot?.querySelector('[id="preview-dimensions"]') != null,
     { timeout: timeoutMs, polling: WAIT_POLL_MS },
   );
 }
@@ -18,6 +20,7 @@ export async function waitForAppReady(page, timeoutMs = 90000) {
 export async function loadDemoPattern(page, timeoutMs = 60000) {
   await clickByA11yId(page, "preview-browse-samples");
   await waitForA11yId(page, "preview-samples-modal", timeoutMs);
+  await clickByA11yId(page, "preview-samples-folder-featured");
   await clickByA11yId(page, "preview-sample-triangles");
   await waitForA11yId(page, "preview-dimensions", timeoutMs);
   await waitForKnitEnabled(page, timeoutMs);
@@ -51,7 +54,12 @@ export async function dismissFirstRunOverlays(page, timeoutMs = 8000) {
 }
 
 export async function waitForA11yId(page, id, timeoutMs = 30000) {
-  await page.waitForSelector(sel(id), { timeout: timeoutMs });
+  await page.waitForFunction(
+    (a11yId) =>
+      document.getElementById("root")?.shadowRoot?.querySelector(`[id="${a11yId}"]`) != null,
+    { timeout: timeoutMs, polling: WAIT_POLL_MS },
+    id,
+  );
 }
 
 export async function textByA11yId(page, id) {
@@ -90,7 +98,7 @@ const WAIT_POLL_MS = 100;
 
 export async function waitForText(page, text, timeoutMs = 30000) {
   await page.waitForFunction(
-    (needle) => document.body.innerText.includes(needle),
+    (needle) => (document.getElementById("root")?.shadowRoot?.textContent ?? "").includes(needle),
     { timeout: timeoutMs, polling: WAIT_POLL_MS },
     text,
   );
@@ -99,7 +107,7 @@ export async function waitForText(page, text, timeoutMs = 30000) {
 export async function waitForA11yText(page, id, text, timeoutMs = 30000) {
   await page.waitForFunction(
     (a11yId, needle) => {
-      const el = document.querySelector(`[id="${a11yId}"]`);
+      const el = document.getElementById("root")?.shadowRoot?.querySelector(`[id="${a11yId}"]`);
       return el != null && (el.textContent ?? "").includes(needle);
     },
     { timeout: timeoutMs, polling: WAIT_POLL_MS },
@@ -135,7 +143,7 @@ export async function setInputByA11yId(page, id, value) {
 export async function waitForKnitEnabled(page, timeoutMs = 90000) {
   await page.waitForFunction(
     () => {
-      const el = document.querySelector('[id="knit-button"]');
+      const el = document.getElementById("root")?.shadowRoot?.querySelector('[id="knit-button"]');
       if (!el) {
         return false;
       }
@@ -153,7 +161,7 @@ export async function waitForKnitEnabled(page, timeoutMs = 90000) {
 export async function waitForKnitDisabled(page, timeoutMs = 30000) {
   await page.waitForFunction(
     () => {
-      const el = document.querySelector('[id="knit-button"]');
+      const el = document.getElementById("root")?.shadowRoot?.querySelector('[id="knit-button"]');
       if (!el) {
         return false;
       }

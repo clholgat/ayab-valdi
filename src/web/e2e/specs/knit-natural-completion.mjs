@@ -1,5 +1,6 @@
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   clickByA11yId,
   waitForA11yId,
   waitForAppReady,
@@ -16,6 +17,16 @@ export async function knitNaturalCompletionSpec(ctx) {
   const { page } = ctx;
   await waitForAppReady(page);
   await loadDemoPattern(page);
+  const infiniteRepeatOn = await page.evaluate(
+    () =>
+      document
+        .getElementById("root")
+        ?.shadowRoot?.querySelector('[id="infinite-repeat-toggle"]')
+        ?.getAttribute("aria-selected") === "true",
+  );
+  if (infiniteRepeatOn) {
+    await clickByA11yId(page, "infinite-repeat-toggle");
+  }
   await clickByA11yId(page, "knit-button");
   await waitForA11yId(page, "cancel-button");
   await waitForText(page, "Progress:");
@@ -25,7 +36,7 @@ export async function knitNaturalCompletionSpec(ctx) {
   await waitForA11yId(page, "knit-button", 15000);
 
   const knitLabel = await page.$eval(
-    '[id="knit-button"]',
+    a11ySelector("knit-button"),
     (el) => el.textContent ?? "",
   );
   assert(
@@ -33,7 +44,7 @@ export async function knitNaturalCompletionSpec(ctx) {
     "Knit button should return to idle label after natural completion",
   );
 
-  const cancelButton = await page.$('[id="cancel-button"]');
+  const cancelButton = await page.$(a11ySelector("cancel-button"));
   assert(
     cancelButton === null,
     "Cancel button should be gone after natural completion",

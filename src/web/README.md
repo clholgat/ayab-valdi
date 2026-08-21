@@ -1,88 +1,40 @@
-# ayab_web web server
+# AYAB Valdi Web
 
-This is a minimal web server for running the ayab_web npm package built by valdi_exported_library.
+The Web app is built by Valdi's first-class `valdi_application` Web target. The
+small npm wrapper in this directory only serves the generated static site and
+runs the browser E2E suite.
 
-## Quick Start
-
-From the `web` directory, simply run:
+## Run locally
 
 ```bash
+cd src/web
 npm start
-# or
-./start.sh
 ```
 
-This will automatically:
-1. Build the `ayab_web` npm package using Bazel
-2. Link the npm package
-3. Install dependencies (if needed)
-4. Link `ayab_web` in this project
-5. Start the web server
+This incrementally builds `//:ayab_valdi_app_web`, extracts
+`bazel-bin/ayab_valdi_app_web.zip` into `web/dist`, and serves it at
+<http://localhost:3030>.
 
-Open up `http://localhost:3030/` in a web browser once the server starts.
-
-## Manual Setup (if needed)
-
-If you prefer to do it manually:
-
-### Build the web dependencies
-
-First, build the ayab_web npm package:
+To build without starting a server:
 
 ```bash
-cd ..
-bazel build :ayab_web
+cd src
+bazel build //:ayab_valdi_app_web
 ```
 
-Then link the npm package:
+## Browser tests
 
 ```bash
-cd bazel-bin/ayab_web 
-npm link
+cd src/web
+npm run e2e
 ```
 
-### Setup and run
-
-From the `web` directory:
+Run a subset while iterating:
 
 ```bash
-npm install
-npm link ayab_web
+E2E_ONLY=smoke,load-image npm run e2e
 ```
 
-`link` has to be run after install because it modifies the `node_modules` folder.
-
-### Run the dev server
-
-From the `web` directory:
-
-```bash
-npm run serve
-```
-
-The app should hotreload when you make changes.
-
-## Troubleshooting
-
-### TypeScript TS5055 Error
-
-If you encounter a `TS5055: Cannot write file because it would overwrite input file` error, this is a known issue with the Valdi build system. Try:
-
-1. Clean the bazel cache:
-   ```bash
-   cd ..
-   bazel clean --expunge
-   ```
-
-2. Clean Valdi build artifacts:
-   ```bash
-   cd ..
-   rm -rf .valdi_build
-   ```
-
-3. Rebuild:
-   ```bash
-   bazel build :ayab_web
-   ```
-
-If the issue persists, this may be a bug in the Valdi framework version you're using. Check if there's an updated version of Valdi available or report the issue to the Valdi repository.
+The globally installed Valdi CLI may not expose `valdi install web` until the
+upstream Web-sync PR is released. The Bazel target above is pinned to the PR
+head and is the reproducible workflow for this repository.

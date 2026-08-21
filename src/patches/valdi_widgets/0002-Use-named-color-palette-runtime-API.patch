@@ -1,0 +1,14 @@
+Adapt Widgets semantic colors to Valdi's named palette API introduced by the
+Valdi Web sync branch. The previous setColorPalette method no longer exists.
+--- a/valdi_modules/widgets/src/InitSemanticColors.ts
++++ b/valdi_modules/widgets/src/InitSemanticColors.ts
+@@ -22,7 +22,8 @@ declare const global: {
+
+ function updateColorPalette(palette: ColorPalette): void {
+   global.currentPalette = palette;
+-  runtime.setColorPalette(palette);
++  runtime.configureColorPalette('default', palette);
++  runtime.setActiveColorPalette('default');
+ }
+
+ if (!global.currentPalette) {

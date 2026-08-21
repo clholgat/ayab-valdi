@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   textByA11yId,
   waitForAppReady,
   waitForA11yText,
@@ -21,7 +22,7 @@ export async function loadPatSpec(ctx) {
   fs.writeFileSync(tmpPath, patBytes);
 
   try {
-    const fileInput = await page.waitForSelector('input[type="file"]', {
+    const fileInput = await page.waitForSelector('#root >>> input[type="file"]', {
       timeout: 15000,
     });
     await fileInput.uploadFile(tmpPath);
@@ -39,7 +40,7 @@ export async function loadPatSpec(ctx) {
       `Expected 2x2 dimensions for minimal .pat, got: ${dimensions}`,
     );
 
-    const knitDisabled = await page.$eval('[id="knit-button"]', (el) => {
+    const knitDisabled = await page.$eval(a11ySelector("knit-button"), (el) => {
       return (
         el.getAttribute("aria-disabled") === "true" ||
         el.hasAttribute("disabled") ||

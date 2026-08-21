@@ -57,6 +57,9 @@ valdi_module(
     native_deps = [":process_image_native_impl"],
     ios_module_name = "ProcessImage",
     web_deps = [":process_image_web"],
+    web_register_native_module_id_overrides = {
+        "process_image/web/ProcessImageNative.js": "process_image/src/ProcessImageNative",
+    },
     visibility = ["//visibility:public"],
     deps = [
         "@valdi//src/valdi_modules/src/valdi/valdi_core",
