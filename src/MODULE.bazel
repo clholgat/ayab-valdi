@@ -22,6 +22,9 @@ archive_override(
         "//patches/valdi:0008-Restore-WebNavStack-route-compatibility.patch",
         "//patches/valdi:0009-Restore-transparent-layout-hit-testing.patch",
         "//patches/valdi:0010-Restore-web-input-scroll-and-mouse-touch-events.patch",
+        "//patches/valdi:0011-Restore-editable-Web-text-views.patch",
+        "//patches/valdi:0012-Preserve-host-styles-in-isolated-web-roots.patch",
+        "//patches/valdi:0013-Restore-shrinkable-web-labels.patch",
     ],
     patch_strip = 1,
 )

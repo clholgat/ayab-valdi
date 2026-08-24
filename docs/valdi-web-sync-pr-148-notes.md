@@ -19,11 +19,14 @@ Valdi commit `08a94ae1ba4624b0d6f0d139eb27f2ea4a560068`.
 - A downstream Puppeteer regression test passes real mouse clicks through the
   Patterns header, a pattern card, the Tools header, and a tool card after the
   temporary layout hit-testing patch.
-- Three newly reported interaction failures are now pinned by failing real-input
-  browser tests: pattern header/scroll/input behavior and Stitch Chart zoom
-  dragging. The proposed stylesheet bridge and `0010` renderer patch were
-  authored immediately before this handoff, but have **not yet been rebuilt or
-  re-run**. Treat sections 11–13 as reproduced findings with unverified fixes.
+- Newly reported interaction and layout failures were pinned by failing
+  real-browser tests: pattern header/scroll/input behavior, Stitch Chart zoom
+  dragging, and narrow-page overflow. With renderer patches `0010` through
+  `0013`, the aggregate `npm run test:pr148` suite passes real mouse, keyboard,
+  and wheel input, and the route suite passes at desktop and phone widths.
+- The corrected `0010` patch applies against the exact pinned Valdi source.
+  `npm run verify` passes the canonical Valdi tests and exported Web package
+  build, and `npm run build` completes the production Webpack build.
 
 ## 1. External Web dependency paths can escape the collapsed output tree
 
@@ -295,10 +298,16 @@ header rect: top=-39.5, bottom=-18.5
 The renderer-root text also contained the complete pattern body twice, which
 confirms that the screen and print timelines were both visible.
 
-**Temporary downstream workaround (not yet verified):** `pattern_website` now
-registers its Web CSS in both `document.head` and every existing/future open
-Valdi renderer shadow root. A `MutationObserver` handles page hosts created after
-bootstrap.
+**Verified temporary framework workaround:**
+`src/patches/valdi/0012-Preserve-host-styles-in-isolated-web-roots.patch`
+clones the host's existing `<style>` and stylesheet `<link>` nodes into each new
+isolated renderer root. `pattern_website` keeps its original document-level CSS
+installation unchanged. The Valdi renderer test confirms cloned rather than
+moved nodes and preserves the renderer's own reset stylesheet; the downstream
+browser suite confirms the header and responsive layout rules are visible.
+Styles added or changed after a renderer root is constructed are not synchronized
+by this compatibility patch, and the actual browser print dialog was not
+re-tested.
 
 **Suggested upstream fix:** provide and document a renderer stylesheet
 registration API that installs application-owned CSS in each isolated root, or
@@ -330,9 +339,11 @@ pointer-active blocks controls behind overlays, while setting layouts to
 pointer-transparent without opting concrete controls back in disables the
 controls themselves.
 
-**Temporary workaround (not yet verified):** copied patch
+**Verified temporary workaround:** copied patch
 `src/patches/valdi/0010-Restore-web-input-scroll-and-mouse-touch-events.patch`
-sets `pointerEvents: 'auto'` when creating Web text fields and scroll views.
+sets `pointerEvents: 'auto'` when creating Web text fields and scroll views. A
+real-browser test focuses `#chestCircumference`, replaces its value by keyboard,
+and advances the page's scroll offset with a wheel event.
 
 **Suggested upstream fix:** encode hit-testing ownership per element class and
 test it as one contract: transparent layout overlays, clickable `onTap` views,
@@ -355,16 +366,119 @@ and—after the necessary transparent-layout fix—leaves the slider at computed
 A Puppeteer test dragged across a visible 1043.58×25 slider with a real mouse;
 the label remained `Zoom: 1.0x`.
 
-**Temporary workaround (not yet verified):** copied patch
+**Verified temporary workaround:** copied patch
 `src/patches/valdi/0010-Restore-web-input-scroll-and-mouse-touch-events.patch`
 opts `onTouch` views into hit testing, restores the document-level desktop mouse
 sequence, cleans listeners up with the attribute lifecycle, and supplies
 element-local `x`/`y` while retaining viewport-relative `absoluteX`/`absoluteY`.
+After rebuilding, the same Puppeteer drag changes the Stitch Chart label from
+`Zoom: 1.0x` to `Zoom: 2.5x`.
 
 **Suggested upstream fix:** restore mouse/pointer parity in `onTouch` (preferably
 with Pointer Events and pointer capture), preserve the documented local versus
 absolute coordinate semantics, and add mouse, touch, drag-outside-bounds, and
 listener-cleanup tests using Widgets' Slider as an integration fixture.
+
+## 14. Multiline text views are read-only by default
+
+**Impact:** multiline editors render with the expected textbox shape and text,
+but cannot receive focus or keyboard input. This blocked the garment workflow's
+free-form pattern summary even after ordinary `CoreTextField` inputs were fixed.
+
+The PR's `TextViewElementClass` creates a pointer-inactive `<div>` and sets
+`contentEditable=false`. A real-browser reproduction reported:
+
+```json
+{"tag":"div","contentEditable":"false","fontFamily":"sans-serif","height":96}
+```
+
+**Verified temporary workaround:** copied patch
+`src/patches/valdi/0011-Restore-editable-Web-text-views.patch` restores the
+previous default editability contract by opting the element into pointer input,
+using `contentEditable=plaintext-only`, and exposing textbox/multiline ARIA
+semantics. The browser garment workflow now enters real multiline text by
+keyboard and completes its sample, profile, fit, AYAB handoff, Back-navigation,
+and post-return checks.
+
+**Suggested upstream fix:** make Web text views editable by default, retain
+`enabled=false` as the explicit read-only path, and add focus, typing, multiline,
+selection, disabled-state, and accessibility integration tests.
+
+## 15. Static CommonJS imports bypass Web native-module overrides
+
+**Impact:** chart images render as empty boxes and edits appear to do nothing.
+The chart's RGBA-to-PNG promise rejects, while the application intentionally
+keeps the previous image and continues without surfacing the encoder failure.
+
+Under PR #148, compiled consumers contain a static webpack import such as:
+
+```js
+require("../../../raster_image/src/RasterImage.js")
+```
+
+The generated `RegisterNativeModules.js` correctly registers
+`raster_image/web/RasterImageWeb` for the module ID
+`raster_image/src/RasterImage`, but that registration only affects Valdi's
+runtime module loader. Webpack follows the relative CommonJS import directly and
+bundles the native Skia implementation instead of the registered canvas shim.
+The resulting Web image element had its expected 336×264 layout but no `<img>`
+or `<canvas>` child.
+
+**Verified temporary downstream workaround:** `pattern_website` adds a webpack
+`NormalModuleReplacementPlugin` rule that maps static imports of
+`raster_image/src/RasterImage.js` to the generated Web shim. After rebuilding,
+the full real-browser chart workflow passes paint, select, copy/paste, reusable
+motifs and palettes, repeat, move, undo, final paint, and workshop export.
+
+**Suggested upstream fix:** make `web_register_native_module_id_overrides`
+effective for both runtime-loader calls and static CommonJS imports in the
+collapsed npm package, or generate imports that consistently use the registered
+module IDs. Add an end-to-end webpack fixture whose Web implementation differs
+observably from its native implementation.
+
+## 16. PR #148 makes all Web labels non-shrinking
+
+**Impact:** at a 320px viewport, the Stitch Chart page acquired 150px of
+horizontal page overflow. Its intentionally wide chart remained correctly
+contained by a horizontal scroller; the actual offender was the status sentence
+`Pick a color and tap or drag on the grid to draw stitches.`, measured at
+445.25px inside a 294.4px row.
+
+The PR's base DOM layout-item styles use `flex-shrink: 0`, and the rewritten
+`LabelElementClass` inherits that value. The previous Web label did not set
+`flex-shrink`, so browser flexbox used its shrinkable default. Labels in
+horizontal rows now keep their intrinsic width unless every consumer explicitly
+overrides the framework default.
+
+**Verified temporary framework workaround:**
+`src/patches/valdi/0013-Restore-shrinkable-web-labels.patch` sets
+`flexShrink: 1` on Web labels. Its Valdi renderer regression test passes, and
+the downstream 320px route test reports no surrounding-page overflow while the
+chart retains its intentional inner two-axis scroller. No app component was
+changed.
+
+**Suggested upstream fix:** restore the previous shrinkable Label default and
+add a narrow-viewport fixture with a wrapping multiline label in a horizontal
+row that asserts it cannot widen the page.
+
+## 17. Stitch Chart column order and faint borders are downstream, not PR regressions
+
+The post-sync visual review expected the older mixed Stitch Chart layout: a
+vertical controls/actions column beside a vertical drawing/preview column on
+wide screens, stacking on phones. That layout exists in the parent of downstream
+commit `6a8f708`; the commit replaced it with the current `chartTimelineStyle`,
+which explicitly sets `flexDirection: 'column'` and renders every card in one
+vertical sequence. The current page also explicitly requests the wide site
+shell. Valdi is rendering the source it receives, so a framework patch cannot
+recreate the historical card grouping. No app source change was retained; this
+needs a separate downstream product/code decision.
+
+The Stitch Chart borders are also present in PR #148's separate paint elements.
+Representative app-defined neutral colors measure only about 1.42–1.48:1
+against their backgrounds, which explains why they appear missing. That contrast
+choice is downstream styling, not dropped renderer attributes. In contrast,
+section 11 is a genuine framework regression for class-based host styles that
+cannot cross the new shadow boundary and is addressed by patch `0012`.
 
 ## Copied downstream compatibility patches
 
@@ -374,6 +488,9 @@ AYAB and referenced by `src/MODULE.bazel`:
 - `0008-Restore-WebNavStack-route-compatibility.patch`
 - `0009-Restore-transparent-layout-hit-testing.patch`
 - `0010-Restore-web-input-scroll-and-mouse-touch-events.patch`
+- `0011-Restore-editable-Web-text-views.patch`
+- `0012-Preserve-host-styles-in-isolated-web-roots.patch`
+- `0013-Restore-shrinkable-web-labels.patch`
 
 The other local Valdi patches were not duplicated because AYAB already carries
 equivalent patches under its own numbering: pattern site's `0006` corresponds
