@@ -1,5 +1,6 @@
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   clickByA11yId,
   waitForAppReady,
   waitForA11yId,
@@ -14,7 +15,7 @@ export async function smokeSpec(ctx) {
   await waitForA11yId(page, "preview-browse-samples");
 
   const settingsText = await page.$eval(
-    '[id="settings-button"]',
+    a11ySelector("settings-button"),
     (el) => el.textContent ?? "",
   );
   assert(settingsText.includes("Settings"), "Settings button should render");

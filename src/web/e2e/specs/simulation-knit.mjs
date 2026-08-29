@@ -1,5 +1,6 @@
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   clickByA11yId,
   waitForA11yId,
   waitForAppReady,
@@ -17,7 +18,7 @@ export async function simulationKnitSpec(ctx) {
   await clickByA11yId(page, "cancel-button");
   await waitForAppReady(page);
   const knitLabel = await page.$eval(
-    '[id="knit-button"]',
+    a11ySelector("knit-button"),
     (el) => el.textContent ?? "",
   );
   assert(knitLabel.includes("Knit"), "Knit button should return to idle label");

@@ -25,7 +25,7 @@ export async function startDevServer(port = DEFAULT_PORT) {
     const res = await fetch(url);
     if (res.ok) {
       const html = await res.text();
-      if (html.includes("ayab_web") || html.includes("Valdi Web App")) {
+      if (html.includes("ayab_valdi") || html.includes("Valdi Web App")) {
         return { url, child: null, port };
       }
     }
@@ -38,7 +38,7 @@ export async function startDevServer(port = DEFAULT_PORT) {
     env: {
       ...process.env,
       PORT: String(port),
-      // run.mjs builds and refreshes the stable bundle immediately before
+      // run.mjs builds and extracts the static site immediately before
       // starting this server. Prevent npm's `preserve` hook doing it again.
       AYAB_WEB_ALREADY_ENSURED: "1",
     },

@@ -28,7 +28,7 @@ export async function previewTransformsSpec(ctx) {
   await clickByA11yId(page, "preview-flip-h");
   await page.waitForFunction(
     (expected) => {
-      const el = document.querySelector('[id="preview-dimensions"]');
+      const el = document.getElementById("root")?.shadowRoot?.querySelector('[id="preview-dimensions"]');
       return (el?.textContent ?? "").trim() === expected;
     },
     {},
@@ -38,7 +38,7 @@ export async function previewTransformsSpec(ctx) {
   await clickByA11yId(page, "preview-rotate");
   await page.waitForFunction(
     (expected) => {
-      const el = document.querySelector('[id="preview-dimensions"]');
+      const el = document.getElementById("root")?.shadowRoot?.querySelector('[id="preview-dimensions"]');
       return (el?.textContent ?? "").trim() === expected;
     },
     {},
@@ -61,7 +61,7 @@ export async function previewTransformsSpec(ctx) {
   await clickByA11yId(page, "preview-repeat-h-increment");
   await page.waitForFunction(
     (expected) => {
-      const el = document.querySelector('[id="preview-dimensions"]');
+      const el = document.getElementById("root")?.shadowRoot?.querySelector('[id="preview-dimensions"]');
       return (el?.textContent ?? "").trim() === expected;
     },
     {},
@@ -71,7 +71,7 @@ export async function previewTransformsSpec(ctx) {
   await clickByA11yId(page, "preview-repeat-v-increment");
   await page.waitForFunction(
     (expected) => {
-      const el = document.querySelector('[id="preview-dimensions"]');
+      const el = document.getElementById("root")?.shadowRoot?.querySelector('[id="preview-dimensions"]');
       return (el?.textContent ?? "").trim() === expected;
     },
     {},

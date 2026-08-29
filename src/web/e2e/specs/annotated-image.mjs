@@ -20,7 +20,7 @@ export async function annotatedImageSpec(ctx) {
   const { page } = ctx;
   await waitForAppReady(page);
 
-  const fileInput = await page.waitForSelector('input[type="file"]', {
+  const fileInput = await page.waitForSelector('#root >>> input[type="file"]', {
     timeout: 15000,
   });
   await fileInput.uploadFile(fixturePath);
@@ -34,7 +34,9 @@ export async function annotatedImageSpec(ctx) {
   // Valdi web nodes may render their labels through nested/shadow elements,
   // so the host's textContent can be empty even though its visible innerText
   // is correct. Read the rendered page text after targeting the memo above.
-  const progressText = await page.evaluate(() => document.body.innerText);
+  const progressText = await page.evaluate(
+    () => document.getElementById("root")?.shadowRoot?.textContent ?? "",
+  );
   assert(
     progressText.includes("Memo: 1"),
     `Expected the annotated row memo in progress UI, got: ${progressText}`,

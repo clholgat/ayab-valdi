@@ -1,5 +1,6 @@
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   clickByA11yId,
   setInputByA11yId,
   waitForA11yText,
@@ -20,7 +21,7 @@ export async function validationSpec(ctx) {
     15000,
   );
   const message = await page.$eval(
-    '[id="user-message"]',
+    a11ySelector("user-message"),
     (el) => el.textContent ?? "",
   );
   assert(

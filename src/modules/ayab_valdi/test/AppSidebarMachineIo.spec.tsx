@@ -61,8 +61,8 @@ function renderSidebar(
 
 // The enabled path (default) renders SerialPortPicker, which loads the native
 // serial module — unavailable in the JS-only test runtime. That path is
-// covered by pattern_website's AyabSidebar_desktop layout snapshot, whose CLI
-// links the real macOS serial impl.
+// covered by a downstream desktop layout snapshot whose CLI links the real
+// macOS serial implementation.
 describe("AppSidebar machine IO gating", () => {
   valdiIt("Verify serial picker and knit footer are omitted when disabled", async driver => {
     const sidebar = renderSidebar(driver, await makePreferences(), makeViewModel({ enableMachineIo: false }));

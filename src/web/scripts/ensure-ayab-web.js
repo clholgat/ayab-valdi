@@ -1,73 +1,58 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
+const { execFileSync, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const webDir = path.resolve(__dirname, '..');
 const workspaceRoot = path.resolve(webDir, '..');
-const bazelAyabWebDir = path.join(workspaceRoot, 'bazel-bin', 'ayab_web');
-const stableAyabWebDir = path.join(webDir, '.ayab_web_cache');
-const bazelMarker = path.join(bazelAyabWebDir, 'src', 'RegisterNativeModules.js');
-const stableMarker = path.join(stableAyabWebDir, 'src', 'RegisterNativeModules.js');
-const integrityMarker = path.join(stableAyabWebDir, 'src', 'coreutils', 'src', 'unicode', 'UnicodeNative.js');
+const repositoryRoot = path.resolve(workspaceRoot, '..');
+const bazelSiteZip = path.join(workspaceRoot, 'bazel-bin', 'ayab_valdi_app_web.zip');
+const distDir = path.join(webDir, 'dist');
+const indexPath = path.join(distDir, 'index.html');
+const bundlePath = path.join(distDir, 'bundle.js');
 
 function isBazelBuilt() {
-  return fs.existsSync(bazelMarker);
+  return fs.existsSync(bazelSiteZip);
 }
 
-function isStableCacheValid() {
-  return fs.existsSync(stableMarker) && fs.existsSync(integrityMarker);
+function isDistValid() {
+  return fs.existsSync(indexPath) && fs.existsSync(bundlePath);
 }
 
-function shouldRefreshCache() {
-  if (!isStableCacheValid()) {
-    return true;
-  }
-  return fs.statSync(bazelMarker).mtimeMs > fs.statSync(stableMarker).mtimeMs;
+function extractStaticSite() {
+  console.log(`Extracting first-class Valdi Web site to ${distDir}...`);
+  fs.rmSync(distDir, { recursive: true, force: true });
+  fs.mkdirSync(distDir, { recursive: true });
+  execFileSync('unzip', ['-oq', bazelSiteZip, '-d', distDir], { stdio: 'inherit' });
 }
 
-function copyAyabWebToStableCache() {
-  console.log(`Copying ayab_web to stable cache at ${stableAyabWebDir}...`);
-  fs.rmSync(stableAyabWebDir, { recursive: true, force: true });
-  fs.cpSync(bazelAyabWebDir, stableAyabWebDir, { recursive: true });
+// The E2E runner builds and extracts immediately before `npm run serve`.
+// Avoid repeating that work in npm's `preserve` lifecycle hook.
+if (process.env.AYAB_WEB_ALREADY_ENSURED === '1' && isDistValid()) {
+  process.exit(0);
 }
 
-// Always ask Bazel for the target unless the E2E runner already did so before
-// spawning webpack. An incremental check keeps the stable cache fresh after
-// source edits; the opt-out avoids npm's `preserve` lifecycle hook performing
-// the same build a second time while the server readiness timer is running.
-if (process.env.AYAB_WEB_ALREADY_ENSURED !== '1') {
-  console.log('Building ayab_web (incremental when up to date)...');
-  execSync('bazel build :ayab_web --define disable_minify_web=true', {
+execFileSync(path.join(repositoryRoot, 'scripts', 'ensure-valdi-registry.sh'), {
+  cwd: repositoryRoot,
+  stdio: 'inherit',
+});
+
+console.log('Building //:ayab_valdi_app_web (incremental when up to date)...');
+execSync('bazel build //:ayab_valdi_app_web', {
     cwd: workspaceRoot,
     stdio: 'inherit',
-  });
-}
+});
 
 if (!isBazelBuilt()) {
-  console.error(`Error: ayab_web not found at ${bazelAyabWebDir}`);
-  console.error('Run from src/: bazel build :ayab_web --define disable_minify_web=true');
+  console.error(`Error: Valdi Web site not found at ${bazelSiteZip}`);
+  console.error('Run from src/: bazel build //:ayab_valdi_app_web');
   process.exit(1);
 }
 
-if (shouldRefreshCache()) {
-  copyAyabWebToStableCache();
-}
+extractStaticSite();
 
-if (!isStableCacheValid()) {
-  console.error(`Error: ayab_web cache is incomplete at ${stableAyabWebDir}`);
+if (!isDistValid()) {
+  console.error(`Error: extracted Valdi Web site is incomplete at ${distDir}`);
   process.exit(1);
-}
-
-// Symlink into node_modules for tools that resolve via node_modules.
-const nodeModulesLink = path.join(webDir, 'node_modules', 'ayab_web');
-fs.mkdirSync(path.dirname(nodeModulesLink), { recursive: true });
-try {
-  if (fs.existsSync(nodeModulesLink)) {
-    fs.unlinkSync(nodeModulesLink);
-  }
-  fs.symlinkSync(path.relative(path.dirname(nodeModulesLink), stableAyabWebDir), nodeModulesLink, 'dir');
-} catch (err) {
-  console.warn('Could not symlink ayab_web into node_modules:', err.message);
 }

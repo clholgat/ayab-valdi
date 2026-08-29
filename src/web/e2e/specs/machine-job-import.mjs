@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { assert } from "../helpers/runner.mjs";
 import {
+  a11ySelector,
   clickByA11yId,
   textByA11yId,
   waitForA11yId,
@@ -42,11 +43,13 @@ export async function machineJobImportSpec(ctx) {
   await page.evaluate((savedCheckpoint) => {
     localStorage.setItem(
       "valdi.PersistentStore.ayab_machine_job_checkpoints",
-      JSON.stringify({ active: { s: JSON.stringify(savedCheckpoint) } }),
+      JSON.stringify({
+        active: { s: JSON.stringify(savedCheckpoint) },
+      }),
     );
   }, checkpoint);
 
-  const inputs = await page.$$('input[type="file"]');
+  const inputs = await page.$$('#root >>> input[type="file"]');
   assert(inputs.length >= 2, "Expected separate pattern and machine-job pickers");
   await inputs[1].uploadFile(fixturePath);
 
@@ -62,7 +65,7 @@ export async function machineJobImportSpec(ctx) {
   assert(summary.includes("needles 0–3"), `Expected needle bounds, got: ${summary}`);
 
   await waitForA11yId(page, "preview-empty-state", 15000);
-  const dimensions = await page.$('[id="preview-dimensions"]');
+  const dimensions = await page.$(a11ySelector("preview-dimensions"));
   assert(dimensions === null, "Inspecting a machine job must not replace the raster pattern");
 
   await clickByA11yId(page, "machine-job-resume");
@@ -76,7 +79,9 @@ export async function machineJobImportSpec(ctx) {
       "valdi.PersistentStore.ayab_machine_job_checkpoints",
     );
     const store = raw ? JSON.parse(raw) : undefined;
-    return store?.active?.s ? JSON.parse(store.active.s) : undefined;
+    return typeof store?.active?.s === "string"
+      ? JSON.parse(store.active.s)
+      : undefined;
   });
   assert(
     retainedCheckpoint?.status === "active",
@@ -91,11 +96,14 @@ export async function machineJobImportSpec(ctx) {
     const raw = localStorage.getItem(
       "valdi.PersistentStore.ayab_machine_job_checkpoints",
     );
-    if (!raw) return undefined;
-    const store = JSON.parse(raw);
+    const store = raw ? JSON.parse(raw) : undefined;
+    const readCheckpoint = (key) => {
+      const entry = store?.[key];
+      return typeof entry?.s === "string" ? JSON.parse(entry.s) : undefined;
+    };
     return {
-      current: store.active?.s ? JSON.parse(store.active.s) : undefined,
-      hasPrevious: typeof store["active.previous"]?.s === "string",
+      current: readCheckpoint("active"),
+      hasPrevious: readCheckpoint("active.previous") != null,
     };
   });
   assert(durable?.current, "Expected a durable machine-job checkpoint");

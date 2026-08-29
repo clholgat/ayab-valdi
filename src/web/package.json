@@ -5,11 +5,10 @@
   "main": "index.js",
   "scripts": {
     "ensure-ayab-web": "node scripts/ensure-ayab-web.js",
-    "prebuild": "npm run ensure-ayab-web",
     "preserve": "npm run ensure-ayab-web",
-    "serve": "webpack serve --mode development",
-    "build": "webpack --mode production",
-    "start": "./start.sh",
+    "serve": "node scripts/serve-static.js",
+    "build": "npm run ensure-ayab-web",
+    "start": "npm run serve",
     "e2e": "node e2e/run.mjs"
   },
   "keywords": [],

@@ -1,0 +1,63 @@
+Preserve host-application styles when PR #148 mounts Valdi inside isolated
+Shadow DOM roots. Existing Web consumers install responsive and print CSS in
+document.head before constructing ValdiWebRenderer; those selectors no longer
+cross the new shadow boundary, so headers, borders, and responsive layouts
+silently disappear. Clone the host's style and stylesheet-link nodes into every
+new renderer root, while retaining the renderer's own isolation/reset style.
+
+diff --git a/src/valdi_modules/src/valdi/web_renderer/src/WebRendererRoot.ts b/src/valdi_modules/src/valdi/web_renderer/src/WebRendererRoot.ts
+--- a/src/valdi_modules/src/valdi/web_renderer/src/WebRendererRoot.ts
++++ b/src/valdi_modules/src/valdi/web_renderer/src/WebRendererRoot.ts
+@@ -38,0 +39,7 @@ function getOrCreateShadowRoot(htmlRoot: HTMLElement | ShadowRoot): ShadowRoot {
++function cloneHostStyleNodes(): Node[] {
++  if (typeof document.querySelectorAll !== 'function') {
++    return [];
++  }
++  return Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')).map(node => node.cloneNode(true));
++}
++
+@@ -45 +52 @@ export function createIsolatedWebRendererRoot(htmlRoot: HTMLElement | ShadowRoot): HTMLElement {
+-  shadowRoot.replaceChildren(style, root);
++  shadowRoot.replaceChildren(...cloneHostStyleNodes(), style, root);
+diff --git a/src/valdi_modules/src/valdi/web_renderer/test/WebRendererRoot.spec.ts b/src/valdi_modules/src/valdi/web_renderer/test/WebRendererRoot.spec.ts
+--- a/src/valdi_modules/src/valdi/web_renderer/test/WebRendererRoot.spec.ts
++++ b/src/valdi_modules/src/valdi/web_renderer/test/WebRendererRoot.spec.ts
+@@ -10,0 +11 @@ class FakeShadowRoot {
++  querySelectorAll(): FakeElement[] { return []; }
+@@ -19,0 +21 @@ interface FakeElement {
++  cloneNode(deep?: boolean): FakeElement;
+@@ -22 +24,6 @@ function makeFakeElement(): FakeElement {
+-  return { style: {} };
++  const element: FakeElement = {
++    style: {},
++    cloneNode: () => ({ ...element, style: { ...element.style } }),
++  };
++  return element;
+@@ -31 +38,3 @@ describe('WebRendererRoot', () => {
+-    (globalThis as unknown as { document: { createElement(): FakeElement } }).document = {
++    (globalThis as unknown as {
++      document: { createElement(): FakeElement; querySelectorAll(): FakeElement[] };
++    }).document = {
+@@ -33,0 +43 @@ describe('WebRendererRoot', () => {
++      querySelectorAll: () => [],
+@@ -68,0 +79,20 @@ describe('WebRendererRoot', () => {
++  it('copies host stylesheets into the isolated renderer root', () => {
++    const hostStyle = makeFakeElement();
++    hostStyle.textContent = '.app-header { display: flex; }';
++    (globalThis as unknown as {
++      document: { createElement(): FakeElement; querySelectorAll(): FakeElement[] };
++    }).document = {
++      createElement: makeFakeElement,
++      querySelectorAll: () => [hostStyle],
++    };
++    const shadowRoot = new FakeShadowRoot();
++
++    const root = createIsolatedWebRendererRoot(shadowRoot as unknown as ShadowRoot) as unknown as FakeElement;
++
++    expect(shadowRoot.children.length).toBe(3);
++    expect(shadowRoot.children[0]).not.toBe(hostStyle);
++    expect(shadowRoot.children[0].textContent).toBe(hostStyle.textContent);
++    expect(shadowRoot.children[1].textContent).toContain('box-sizing: border-box');
++    expect(shadowRoot.children[2]).toBe(root);
++  });
++

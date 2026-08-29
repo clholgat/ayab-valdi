@@ -10,7 +10,7 @@ import {
 async function waitForCommandEnabled(page, id, timeoutMs = 60000) {
   await page.waitForFunction(
     (a11yId) => {
-      const el = document.querySelector(`[id="${a11yId}"]`);
+      const el = document.getElementById("root")?.shadowRoot?.querySelector(`[id="${a11yId}"]`);
       if (!el) {
         return false;
       }
