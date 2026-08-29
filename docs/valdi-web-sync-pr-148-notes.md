@@ -1,17 +1,46 @@
 # Valdi Web sync PR #148 integration notes
 
 These notes capture issues found while updating AYAB Valdi to
-[Snapchat/Valdi#148](https://github.com/Snapchat/Valdi/pull/148), tested at
-Valdi commit `08a94ae1ba4624b0d6f0d139eb27f2ea4a560068`.
+[Snapchat/Valdi#148](https://github.com/Snapchat/Valdi/pull/148). The initial
+integration used `08a94ae1ba4624b0d6f0d139eb27f2ea4a560068`; the current pin is
+Simon's follow-up at `745e8f38286a5c4ff38f1529efb54df7a45816d7`.
+
+## Upstream follow-up
+
+Simon followed up on the downstream findings on August 26. The current status
+of each section below is:
+
+- Sections 1–3 are fixed upstream: external-path normalization, the deprecated
+  palette compatibility API, and the previous public Web persistence format
+  were restored.
+- Sections 4 and 6 use the intended explicit
+  `web_register_native_module_id_overrides` ownership model. AYAB retains its
+  owning-module mapping; the updated collapsed Web application builds with it.
+- Section 5 is fixed by generated component-registry resolution.
+- Section 7 is fixed by restoring the browser-history navigation surface.
+- Section 8 is now documented as required Webpack configuration rather than
+  changed in the generated package.
+- Sections 10, 12–14, and 16 are fixed upstream with focused renderer coverage.
+- Sections 9 and 11 remain consequences of intentional isolated renderer roots.
+  AYAB retains only the section 11 stylesheet compatibility patch.
+- Section 15 is unchanged by design: a static import of a concrete JavaScript
+  implementation continues to resolve that file rather than a Web override.
+- Section 17 remains downstream-only and is not a Valdi regression.
 
 ## Validation performed
 
+- At the current `745e8f38` pin, `valdi projectsync`, the production Webpack
+  build, the upstream Web renderer test, all 11 project Bazel tests, and all 17
+  browser workflows pass.
+- The machine-job browser fixture now seeds and reads the restored
+  `valdi.PersistentStore.<name>` whole-store format instead of the temporary
+  per-entry `valdi.persistence.v1` format.
 - `bazel build //:ayab_valdi_app_web` succeeds with the temporary compatibility
   changes in this branch.
 - All 11 project Bazel test targets pass.
 - All 17 browser E2E workflows pass.
 - The Web simulation workflow was also verified manually.
-- In the downstream `pattern_website` consumer, `npm run build` succeeds and
+- In a second downstream Web consumer, `npm run build` succeeds and
   `npm run verify` passes the canonical Valdi test target plus exported Web
   package build.
 - The downstream `/projects` deep link was verified visually after it
@@ -168,7 +197,8 @@ component.
 **Impact:** downstream builds can fail either during Valdi compilation or later
 in Webpack, depending on which module declares the override.
 
-`pattern_website` has a native `raster_image/src/RasterImage.tsx` implementation
+The second downstream consumer has a native
+`raster_image/src/RasterImage.tsx` implementation
 and a Web implementation at `raster_image/web/RasterImageWeb.ts`. Keeping the
 override on the owning `raster_image` `valdi_module` makes the PR compiler emit
 both the concrete TSX output and generated Web shim to:
@@ -184,7 +214,7 @@ Webpack reports unresolved `process_image/src/ProcessImageNative` imports.
 
 **Temporary workaround:** remove the raster override from its owning module and
 redeclare both the raster and process-image mappings on the consuming
-`pattern_website` module.
+application module.
 
 **Suggested upstream fix:** define one unambiguous ownership model for these
 mappings, aggregate valid mappings transitively, and suppress/replace the
@@ -194,7 +224,7 @@ presenting it as a second source file.
 
 ## 7. The public browser-history navigation surface was removed
 
-**Impact:** `pattern_website` no longer compiles because it imports
+**Impact:** the second downstream consumer no longer compiles because it imports
 `web_renderer/src/WebNavStack` and `web_renderer/src/RouteRegistry` for browser
 history, deep links, canonical URLs, and custom route construction.
 
@@ -268,8 +298,8 @@ layout covers the complete body below the header and wins
 `shadowRoot.elementFromPoint()`, preventing real pointer events from reaching
 the cards underneath.
 
-**Temporary workaround:** `pattern_website` patches `LayoutElementClass` so
-new layout/view `<div>` nodes start with `pointer-events: none`; the existing
+**Temporary workaround:** the downstream consumer patches `LayoutElementClass`
+so new layout/view `<div>` nodes start with `pointer-events: none`; the existing
 gesture attribute appliers continue to set `pointer-events: auto` on interactive
 views. A Puppeteer regression test performs real mouse clicks through both a
 pattern card and a tool card.
@@ -284,7 +314,8 @@ overlay does not intercept clicks while a child with `onTap` remains clickable.
 **Impact:** downstream pattern pages show no usable header, do not scroll, and
 render their print-only copy alongside the interactive screen copy.
 
-`pattern_website` installs responsive-layout and print styles in `document.head`.
+The downstream consumer installs responsive-layout and print styles in
+`document.head`.
 PR #148 creates an open shadow root for every page host, so selectors such as
 `.akf-print-document { display: none }` no longer reach the rendered page.
 The print copy therefore remains in normal flex layout and distorts the screen
@@ -301,8 +332,9 @@ confirms that the screen and print timelines were both visible.
 **Verified temporary framework workaround:**
 `src/patches/valdi/0012-Preserve-host-styles-in-isolated-web-roots.patch`
 clones the host's existing `<style>` and stylesheet `<link>` nodes into each new
-isolated renderer root. `pattern_website` keeps its original document-level CSS
-installation unchanged. The Valdi renderer test confirms cloned rather than
+isolated renderer root. The downstream consumer keeps its original
+document-level CSS installation unchanged. The Valdi renderer test confirms
+cloned rather than
 moved nodes and preserves the renderer's own reset stylesheet; the downstream
 browser suite confirms the header and responsive layout rules are visible.
 Styles added or changed after a renderer root is constructed are not synchronized
@@ -424,8 +456,8 @@ bundles the native Skia implementation instead of the registered canvas shim.
 The resulting Web image element had its expected 336×264 layout but no `<img>`
 or `<canvas>` child.
 
-**Verified temporary downstream workaround:** `pattern_website` adds a webpack
-`NormalModuleReplacementPlugin` rule that maps static imports of
+**Verified temporary downstream workaround:** the downstream consumer adds a
+Webpack `NormalModuleReplacementPlugin` rule that maps static imports of
 `raster_image/src/RasterImage.js` to the generated Web shim. After rebuilding,
 the full real-browser chart workflow passes paint, select, copy/paste, reusable
 motifs and palettes, repeat, move, undo, final paint, and workshop export.
@@ -480,18 +512,15 @@ choice is downstream styling, not dropped renderer attributes. In contrast,
 section 11 is a genuine framework regression for class-based host styles that
 cannot cross the new shadow boundary and is addressed by patch `0012`.
 
-## Copied downstream compatibility patches
+## Current downstream compatibility patches
 
-The following previously local `pattern_website` patches are now copied into
-AYAB and referenced by `src/MODULE.bazel`:
+After updating to `745e8f38`, the upstreamed Web compatibility patches were
+removed. AYAB still carries:
 
-- `0008-Restore-WebNavStack-route-compatibility.patch`
-- `0009-Restore-transparent-layout-hit-testing.patch`
-- `0010-Restore-web-input-scroll-and-mouse-touch-events.patch`
-- `0011-Restore-editable-Web-text-views.patch`
-- `0012-Preserve-host-styles-in-isolated-web-roots.patch`
-- `0013-Restore-shrinkable-web-labels.patch`
+- `0001-Align-libvaldi-LOAD-segments-for-16KB-pages.patch`, an unrelated Android
+  packaging fix.
+- `0012-Preserve-host-styles-in-isolated-web-roots.patch`, which makes existing
+  application responsive and print styles available inside intentional
+  renderer shadow roots.
 
-The other local Valdi patches were not duplicated because AYAB already carries
-equivalent patches under its own numbering: pattern site's `0006` corresponds
-to AYAB `0001`, and pattern site's `0007` corresponds to AYAB `0002`.
+The Valdi Widgets pin retains only its Bazel registry/platform wiring patch.

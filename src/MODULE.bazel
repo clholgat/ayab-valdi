@@ -2,7 +2,7 @@ module(name = "ayab_valdi", version = "0.1")
 
 # Pinned upstream commits (keep in sync with .github/valdi-deps.env).
 # Update with: ./scripts/pin-valdi-deps.sh <valdi-sha> <widgets-sha>
-VALDI_REF = "08a94ae1ba4624b0d6f0d139eb27f2ea4a560068"
+VALDI_REF = "745e8f38286a5c4ff38f1529efb54df7a45816d7"
 WIDGETS_REF = "eaf2af1682c406abfa87ebf5c87d01dd44e14c9c"
 
 VALDI_URL = "https://github.com/Snapchat/Valdi/archive/{}.tar.gz".format(VALDI_REF)
@@ -18,13 +18,7 @@ archive_override(
     strip_prefix = VALDI_STRIP_PREFIX,
     patches = [
         "//patches/valdi:0001-Align-libvaldi-LOAD-segments-for-16KB-pages.patch",
-        "//patches/valdi:0002-Normalize-external-web-native-paths.patch",
-        "//patches/valdi:0008-Restore-WebNavStack-route-compatibility.patch",
-        "//patches/valdi:0009-Restore-transparent-layout-hit-testing.patch",
-        "//patches/valdi:0010-Restore-web-input-scroll-and-mouse-touch-events.patch",
-        "//patches/valdi:0011-Restore-editable-Web-text-views.patch",
         "//patches/valdi:0012-Preserve-host-styles-in-isolated-web-roots.patch",
-        "//patches/valdi:0013-Restore-shrinkable-web-labels.patch",
     ],
     patch_strip = 1,
 )
@@ -85,7 +79,6 @@ archive_override(
     strip_prefix = WIDGETS_STRIP_PREFIX,
     patches = [
         "//patches/valdi_widgets:0001-Wire-android_mvn-and-platforms-into-widgets-MODULE.patch",
-        "//patches/valdi_widgets:0002-Use-named-color-palette-runtime-API.patch",
     ],
     patch_strip = 1,
 )

@@ -42,12 +42,9 @@ export async function machineJobImportSpec(ctx) {
   };
   await page.evaluate((savedCheckpoint) => {
     localStorage.setItem(
-      "valdi.persistence.v1:device:ayab_machine_job_checkpoints:active",
+      "valdi.PersistentStore.ayab_machine_job_checkpoints",
       JSON.stringify({
-        accessedAt: 1,
-        encoding: 0,
-        value: JSON.stringify(savedCheckpoint),
-        weight: 0,
+        active: { s: JSON.stringify(savedCheckpoint) },
       }),
     );
   }, checkpoint);
@@ -79,10 +76,12 @@ export async function machineJobImportSpec(ctx) {
   await waitForText(page, "Progress was retained for recovery", 15000);
   const retainedCheckpoint = await page.evaluate(() => {
     const raw = localStorage.getItem(
-      "valdi.persistence.v1:device:ayab_machine_job_checkpoints:active",
+      "valdi.PersistentStore.ayab_machine_job_checkpoints",
     );
-    const entry = raw ? JSON.parse(raw) : undefined;
-    return typeof entry?.value === "string" ? JSON.parse(entry.value) : undefined;
+    const store = raw ? JSON.parse(raw) : undefined;
+    return typeof store?.active?.s === "string"
+      ? JSON.parse(store.active.s)
+      : undefined;
   });
   assert(
     retainedCheckpoint?.status === "active",
@@ -94,12 +93,13 @@ export async function machineJobImportSpec(ctx) {
   await waitForA11yText(page, "machine-job-compatibility", "Compatible", 15000);
 
   const durable = await page.evaluate(() => {
+    const raw = localStorage.getItem(
+      "valdi.PersistentStore.ayab_machine_job_checkpoints",
+    );
+    const store = raw ? JSON.parse(raw) : undefined;
     const readCheckpoint = (key) => {
-      const raw = localStorage.getItem(
-        `valdi.persistence.v1:device:ayab_machine_job_checkpoints:${key}`,
-      );
-      const entry = raw ? JSON.parse(raw) : undefined;
-      return typeof entry?.value === "string" ? JSON.parse(entry.value) : undefined;
+      const entry = store?.[key];
+      return typeof entry?.s === "string" ? JSON.parse(entry.s) : undefined;
     };
     return {
       current: readCheckpoint("active"),
